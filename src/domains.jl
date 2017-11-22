@@ -249,31 +249,3 @@ function cubicdealias!(a::Array{Complex{Float64}, 3}, g)
   end
   nothing
 end
-
-
-
-
-"""
-Returns an filter with an exponentially-decaying profile that, when multiplied
-removes high-wavenumber content from a spectrum.
-"""
-function makefilter(g::TwoDGrid; order=4.0, innerK=0.65, outerK=1.0,
-  realvars=true)
-
-  # Get decay rate for filter
-  decay = 15.0*log(10.0) / (outerK-innerK)^order
-
-  # Non-dimensional square wavenumbers
-  if realvars
-    KK = sqrt.( (g.Kr*g.dx/π).^2 + (g.Lr*g.dy/π).^2 )
-  else
-    KK = sqrt.( (g.K*g.dx/π).^2  + (g.L*g.dy/π).^2  )
-  end
-
-  filt = exp.( -decay*(KK-innerK).^order )
-
-  filt[ real.(KK) .< innerK ] = 1
-
-  return filt
-
-end
