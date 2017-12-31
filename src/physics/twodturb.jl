@@ -12,7 +12,7 @@ export Params,
 export set_q!, updatevars!
 
 
-# Problem ---------------------------------------------------------------------
+# Problem
 function InitialValueProblem(;
   nx = 256,
   Lx = 2π,
@@ -34,11 +34,9 @@ function InitialValueProblem(;
   vs = TwoDTurb.Vars(g)
   eq = TwoDTurb.Equation(pr, g)
   if withfilter
-      # ts = ForwardEulerTimeStepper(dt, g, vs)
-      ts = FilteredETDRK4TimeStepper(dt, eq.LC, g)
+    ts = FilteredETDRK4TimeStepper(dt, eq.LC, g)
   else
-      # ts = ETDRK4TimeStepper(dt, eq.LC)
-      ts = ETDRK4TimeStepper(dt, eq.LC)
+    ts = ETDRK4TimeStepper(dt, eq.LC)
   end
 
   FourierFlows.Problem(g, vs, pr, eq, ts)
@@ -49,20 +47,16 @@ function InitialValueProblem(n, L, ν, nν, dt, withfilter)
 end
 
 
-
-
 # P A R A M S
-type Params <: AbstractParams
-  ν::Float64                     # Vorticity viscosity
-  nν::Int                        # Vorticity hyperviscous order
+struct Params <: AbstractParams
+  ν::Float64  # Vorticity viscosity
+  nν::Int     # Vorticity hyperviscous order
 end
 
 
-
-
 # E Q U A T I O N S
-type Equation <: AbstractEquation
-  LC::Array{Complex{Float64}, 2}  # Element-wise coeff of the eqn's linear part
+struct Equation <: AbstractEquation
+  LC::Array{Complex{Float64},2}  # Element-wise coeff of the eqn's linear part
   calcNL!::Function               # Function to calculate eqn's nonlinear part
 end
 
@@ -76,33 +70,33 @@ end
 
 
 # V A R S
-type Vars <: AbstractVars
+struct Vars <: AbstractVars
 
   t::Float64
-  sol::Array{Complex128, 2}
+  sol::Array{Complex{Float64},2}
 
   # Auxiliary vars
-  q::Array{Float64, 2}
-  U::Array{Float64, 2}
-  V::Array{Float64, 2}
-  Uq::Array{Float64, 2}
-  Vq::Array{Float64, 2}
-  psi::Array{Float64, 2}
+  q::Array{Float64,2}
+  U::Array{Float64,2}
+  V::Array{Float64,2}
+  Uq::Array{Float64,2}
+  Vq::Array{Float64,2}
+  psi::Array{Float64,2}
 
   # Solution
-  qh::Array{Complex128, 2}
-  Uh::Array{Complex128, 2}
-  Vh::Array{Complex128, 2}
-  Uqh::Array{Complex128, 2}
-  Vqh::Array{Complex128, 2}
-  psih::Array{Complex128, 2}
+  qh::Array{Complex{Float64},2}
+  Uh::Array{Complex{Float64},2}
+  Vh::Array{Complex{Float64},2}
+  Uqh::Array{Complex{Float64},2}
+  Vqh::Array{Complex{Float64},2}
+  psih::Array{Complex{Float64},2}
 
 end
 
 function Vars(g::TwoDGrid)
   # Initialize with t=0
   t = 0.0
-  sol  = zeros(Complex128, g.nkr, g.nl)
+  sol  = zeros(Complex{Float64}, g.nkr, g.nl)
 
   # Vorticity auxiliary vars
   q    = zeros(Float64, g.nx, g.ny)
@@ -112,12 +106,12 @@ function Vars(g::TwoDGrid)
   Vq   = zeros(Float64, g.nx, g.ny)
   psi  = zeros(Float64, g.nx, g.ny)
 
-  qh   = zeros(Complex128, g.nkr, g.nl)
-  Uh   = zeros(Complex128, g.nkr, g.nl)
-  Vh   = zeros(Complex128, g.nkr, g.nl)
-  Uqh  = zeros(Complex128, g.nkr, g.nl)
-  Vqh  = zeros(Complex128, g.nkr, g.nl)
-  psih = zeros(Complex128, g.nkr, g.nl)
+  qh   = zeros(Complex{Float64}, g.nkr, g.nl)
+  Uh   = zeros(Complex{Float64}, g.nkr, g.nl)
+  Vh   = zeros(Complex{Float64}, g.nkr, g.nl)
+  Uqh  = zeros(Complex{Float64}, g.nkr, g.nl)
+  Vqh  = zeros(Complex{Float64}, g.nkr, g.nl)
+  psih = zeros(Complex{Float64}, g.nkr, g.nl)
 
   # Random initial condition
   sol = exp.( 2.0*pi*im*rand(g.nkr, g.nl) )
@@ -138,19 +132,19 @@ function calcNL!(NL::Array{Complex{Float64}, 2}, sol::Array{Complex{Float64}, 2}
 
   A_mul_B!(v.q, g.irfftplan, v.qh)
 
-  v.Uh .=    im .* g.Lr .* g.invKKrsq .* sol
-  v.Vh .= (-im) .* g.Kr .* g.invKKrsq .* sol
+  @. v.Uh =  im*g.l *g.invKKrsq*sol
+  @. v.Vh = -im*g.kr*g.invKKrsq*sol
 
   A_mul_B!(v.U, g.irfftplan, v.Uh)
   A_mul_B!(v.V, g.irfftplan, v.Vh)
 
-  v.Uq .= v.U.*v.q
-  v.Vq .= v.V.*v.q
+  @. v.Uq = v.U*v.q
+  @. v.Vq = v.V*v.q
 
   A_mul_B!(v.Uqh, g.rfftplan, v.Uq)
   A_mul_B!(v.Vqh, g.rfftplan, v.Vq)
 
-  NL .= (-im) .* g.Kr.*v.Uqh .- im .* g.Lr.*v.Vqh
+  @. NL = -im*g.kr*v.Uqh - im*g.l*v.Vqh
 
 end
 
@@ -159,30 +153,20 @@ end
 
 # H E L P E R   F U N C T I O N S
 function updatevars!(v::Vars, g::TwoDGrid)
-
   v.qh .= v.sol
+  @. v.psih = -g.invKKrsq*v.qh
+  @. v.Uh = -im*g.l  * v.psih
+  @. v.Vh =  im*g.kr * v.psih
 
-  # We don't use A_mul_B here because irfft destroys its input.
-  # A_mul_B!(v.q, g.irfftplan, v.qh)
-  v.q = irfft(v.qh, g.nx)
+  qh = deepcopy(v.qh)
+  Uh = deepcopy(v.Uh)
+  Vh = deepcopy(v.Vh)
 
-  @. v.psih = -v.qh*g.invKKrsq
+  A_mul_B!(v.q, g.irfftplan, qh)
+  A_mul_B!(v.U, g.irfftplan, Uh)
+  A_mul_B!(v.V, g.irfftplan, Vh)
 
-  @. v.Uh =    im * g.Lr * g.invKKrsq * v.qh
-  @. v.Vh = (-im) * g.Kr * g.invKKrsq * v.qh
-
-  # We don't use A_mul_B here because irfft destroys its input.
-  #A_mul_B!(v.U, g.irfftplan, v.Uh)
-  #A_mul_B!(v.V, g.irfftplan, v.Vh)
-  v.U = irfft(v.Uh, g.nx)
-  v.V = irfft(v.Vh, g.nx)
-
-  v.Uq .= v.U .* v.q
-  v.Vq .= v.V .* v.q
-
-  A_mul_B!(v.Uqh, g.rfftplan, v.Uq)
-  A_mul_B!(v.Vqh, g.rfftplan, v.Vq)
-
+  nothing
 end
 
 function updatevars!(v::Vars, p::Params, g::TwoDGrid)
