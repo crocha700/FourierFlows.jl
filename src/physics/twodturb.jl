@@ -18,19 +18,22 @@ function InitialValueProblem(;
   Lx = 2π,
   ny = nothing,
   Ly = nothing,
-  ν  = nothing,
-  nν = 2,
+  nu = nothing,
+  nnu = 2,
   dt = 0.01,
-  withfilter = true
+  withfilter = false
   )
 
   if Ly == nothing; Ly = Lx; end
   if ny == nothing; ny = nx; end
-  if ν  == nothing; ν = 1e-1/(dt*(0.65π*nx/Lx)^nν); end
-  if ν  ==  0; withfilter = true; end
+  if nu == nothing 
+    if !withfilter; nu = 0.0
+    else            nu = 1e-1/(dt*(0.65π*nx/Lx)^nnu)
+    end
+  end
 
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = TwoDTurb.Params(ν, nν)
+  pr = TwoDTurb.Params(nu, nnu)
   vs = TwoDTurb.Vars(g)
   eq = TwoDTurb.Equation(pr, g)
   if withfilter
@@ -42,15 +45,15 @@ function InitialValueProblem(;
   FourierFlows.Problem(g, vs, pr, eq, ts)
 end
 
-function InitialValueProblem(n, L, ν, nν, dt, withfilter)
-  InitialValueProblem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt, withfilter=withfilter)
+function InitialValueProblem(n, L, nu, nnu, dt, withfilter)
+  InitialValueProblem(nx=n, Lx=L, nu=nu, nnu=nnu, dt=dt, withfilter=withfilter)
 end
 
 
 # P A R A M S
 struct Params <: AbstractParams
-  ν::Float64  # Vorticity viscosity
-  nν::Int     # Vorticity hyperviscous order
+  nu::Float64  # Vorticity viscosity
+  nnu::Int     # Vorticity hyperviscous order
 end
 
 
@@ -61,8 +64,7 @@ struct Equation <: AbstractEquation
 end
 
 function Equation(p::Params, g::TwoDGrid)
-  # Function calcNL! is defined below.
-  LC = -p.ν * g.KKrsq.^(0.5*p.nν)
+  LC = -p.nu*g.KKrsq.^(0.5*p.nnu)
   Equation(LC, calcNL!)
 end
 
@@ -70,12 +72,10 @@ end
 
 
 # V A R S
-struct Vars <: AbstractVars
-
+mutable struct Vars <: AbstractVars
   t::Float64
   sol::Array{Complex{Float64},2}
 
-  # Auxiliary vars
   q::Array{Float64,2}
   U::Array{Float64,2}
   V::Array{Float64,2}
@@ -83,14 +83,12 @@ struct Vars <: AbstractVars
   Vq::Array{Float64,2}
   psi::Array{Float64,2}
 
-  # Solution
   qh::Array{Complex{Float64},2}
   Uh::Array{Complex{Float64},2}
   Vh::Array{Complex{Float64},2}
   Uqh::Array{Complex{Float64},2}
   Vqh::Array{Complex{Float64},2}
   psih::Array{Complex{Float64},2}
-
 end
 
 function Vars(g::TwoDGrid)
@@ -116,25 +114,21 @@ function Vars(g::TwoDGrid)
   # Random initial condition
   sol = exp.( 2.0*pi*im*rand(g.nkr, g.nl) )
 
-  return Vars(t, sol, q, U, V, Uq, Vq, psi, qh, Uh, Vh, Uqh, Vqh, psih)
+  Vars(t, sol, q, U, V, Uq, Vq, psi, qh, Uh, Vh, Uqh, Vqh, psih)
 end
 
 
 
 
 # S O L V E R S
-function calcNL!(NL::Array{Complex{Float64}, 2}, sol::Array{Complex{Float64}, 2},
+function calcNL!(NL::Array{Complex{Float64},2}, sol::Array{Complex{Float64},2},
   t::Float64, v::Vars, p::Params, g::TwoDGrid)
 
-  # This copy is necessary because calling A_mul_B(v.q, g.irfftplan, sol)
-  # a few lines below destroys sol when using Julia's FFTW.
-  v.qh .= sol
-
-  A_mul_B!(v.q, g.irfftplan, v.qh)
-
+  @. v.qh = sol
   @. v.Uh =  im*g.l *g.invKKrsq*sol
   @. v.Vh = -im*g.kr*g.invKKrsq*sol
 
+  A_mul_B!(v.q, g.irfftplan, v.qh)
   A_mul_B!(v.U, g.irfftplan, v.Uh)
   A_mul_B!(v.V, g.irfftplan, v.Vh)
 
@@ -146,6 +140,7 @@ function calcNL!(NL::Array{Complex{Float64}, 2}, sol::Array{Complex{Float64}, 2}
 
   @. NL = -im*g.kr*v.Uqh - im*g.l*v.Vqh
 
+  nothing
 end
 
 
@@ -230,11 +225,11 @@ end
     Lx: grid extent
     qf: final maximum vorticity
     q0: initial maximum vorticity
-    nν: order of hyperviscosity
-    maxsteps: maximum νmber of steps to take
+    nnu: order of hyperviscosity
+    maxsteps: maximum number of steps to take
     dt: time step
-    ν: hyperviscosity
-    k0: initial waveνmber
+    nu: hyperviscosity
+    k0: initial wavenumber
     E0: initial energy
     tf: final time
     plots: whether or not to plot field evolution
@@ -242,8 +237,8 @@ end
   Returns
     q: The vorticity field
 """
-function makematureturb(nx::Int, Lx::Real; qf=0.1, q0=0.2, nν=4,
-  maxsteps=10000, dt=nothing, ν=nothing, k0=nx/2,
+function makematureturb(nx::Int, Lx::Real; qf=0.1, q0=0.2, nnu=4,
+  maxsteps=10000, dt=nothing, nu=nothing, k0=nx/2,
   E0=nothing, tf=nothing, plots=false, loginterval=5)
 
   g  = TwoDGrid(nx, Lx)
@@ -282,13 +277,13 @@ function makematureturb(nx::Int, Lx::Real; qf=0.1, q0=0.2, nν=4,
 
   # Defaults
   if dt == nothing; dt = 0.1*g.dx/maximum([vs.U; vs.V]);  end
-  if ν == nothing; ν = 0.1/(dt*(0.65*nx/Lx)^nν);          end
+  if nu == nothing; nu = 0.1/(dt*(0.65*nx/Lx)^nnu);          end
   if tf != nothing; maxsteps = ceil(Int, tf/dt); qf=0.0   end
 
   # Number of substeps between vorticity-checking
   substeps = ceil(Int, loginterval/(maxq*dt))
 
-  pr = TwoDTurb.Params(ν, nν)
+  pr = TwoDTurb.Params(nu, nnu)
   eq = TwoDTurb.Equation(pr, g)
   ts = ETDRK4TimeStepper(dt, eq.LC)
 
