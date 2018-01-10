@@ -105,14 +105,6 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "man/docstrings.html#FourierFlows.groupsize-Tuple{JLD2.Group}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.groupsize",
-    "category": "Method",
-    "text": "Find the number of elements in a JLD2 group. \n\n\n\n"
-},
-
-{
     "location": "man/docstrings.html#FourierFlows.increment!-Tuple{AbstractArray}",
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.increment!",
@@ -129,43 +121,11 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "man/docstrings.html#FourierFlows.savediagnostic-Tuple{FourierFlows.AbstractDiagnostic,String,String}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.savediagnostic",
-    "category": "Method",
-    "text": "Save diagnostics to file.\n\n\n\n"
-},
-
-{
-    "location": "man/docstrings.html#FourierFlows.saveoutput-Tuple{AbstractArray}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.saveoutput",
-    "category": "Method",
-    "text": "Save an array of outputs to file. \n\n\n\n"
-},
-
-{
-    "location": "man/docstrings.html#FourierFlows.saveoutput-Tuple{FourierFlows.OldOutput}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.saveoutput",
-    "category": "Method",
-    "text": "Save output to file. \n\n\n\n"
-},
-
-{
     "location": "man/docstrings.html#FourierFlows.saveoutput-Tuple{FourierFlows.Output}",
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.saveoutput",
     "category": "Method",
     "text": "Save the current output fields. \n\n\n\n"
-},
-
-{
-    "location": "man/docstrings.html#FourierFlows.saveproblem-Tuple{FourierFlows.AbstractProblem,String}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.saveproblem",
-    "category": "Method",
-    "text": "Save certain aspects of a Problem. Entire problems cannot be saved in general, because functions cannot be saved (and functions may use arbitrary numbers of global variables that cannot be included in a saved object).\n\n\n\n"
 },
 
 {
@@ -190,14 +150,6 @@ var documenterSearchIndex = {"docs": [
     "title": "Functions exported from FourierFlows:",
     "category": "section",
     "text": "Modules = [FourierFlows]\nPrivate = false\nOrder = [:function]"
-},
-
-{
-    "location": "man/docstrings.html#FourierFlows.OldOutput",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.OldOutput",
-    "category": "Type",
-    "text": "Original output type for FourierFlows problems. \n\n\n\n"
 },
 
 {
