@@ -29,7 +29,15 @@ var documenterSearchIndex = {"docs": [
     "page": "Home",
     "title": "Installation",
     "category": "section",
-    "text": "FourierFlows is a registered package and so can be installed via Pkg.add.Pkg.add(\"FourierFlows\")For now, this package supports Julia 0.6."
+    "text": "FourierFlows is a registered package and so can be installed via Pkg.add.Pkg.add(\"FourierFlows\")For now, this package supports Julia 0.6. Support for version 0.7 is on its way."
+},
+
+{
+    "location": "index.html#Basic-Notation-1",
+    "page": "Home",
+    "title": "Basic Notation",
+    "category": "section",
+    "text": "The code solves partial differential equations of the general form:partial_t u = mathcalLu + mathcalN(u) The mathcalLu part is time-stepped forward using an implicit scheme; the mathcalN(u) part is time-stepped forward using an explicit scheme.The coefficients for the linear operator mathcalL are stored in array LC. The term mathcalN(u) is computed for by calling the function calcN."
 },
 
 {
@@ -37,7 +45,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Home",
     "title": "Source code organization",
     "category": "section",
-    "text": "The code is divided along conceptual lines into problem-agnostic and problem-specific components. Files that contain problem-agnostic parts of the code are stored in /src. Files in /src define the domain, 'AbstractTypes' that supertype problem-specific types, and time-stepper types and routines. Problem-specific modules are stores in /src/physics.Here's an overview of the code structure:/src/\nFourierFlows.jl\nDefines supertyping AbstractParams, AbstractGrid, etc.\nDefines a Problem type to organize the grid, vars, params,   equation, and timestepper into a single structure.\nIncludes all sources files and physics files.\ntimesteppers.jl: defines modules and stepforward! routines for   various time-steppers. Current implemented time-steppers are:\nForward Euler (+ Filtered Forward Euler)\n3rd-order Adams-Bashforth (AB3)\n4th-order Runge-Kutta (RK4)\n4th-order Runge-Kutta Exponential Time Differencing (ETDRK4)\n(+ Filtered ETDRK4)\nphysics/\ntwodturb.jl: Defines a TwoDTurb module that provides a       solver for the two-dimensional vorticity equation.\nbarotropicqg.jl: Defines a BarotropicQG module that provides       several solvers for the barotropic QG model that permit beta,       topography, beta + topography, and forcing.\ntwomodeboussinesq.jl: Defines a TwoModeBoussinesq module       that provides solvers for a two-mode truncation of the       rotating, stratified Boussinesq equation.\nniwqg.jl: Defines a NIWQG module that provides a solver       for the vertical-plane-wave model for the interaction of       a near-inertial wave field and quasi-geostrophic flow.\ntraceradvdiff.jl: Defines a TracerAdvDiff module that       provides a solver for a two-dimensional and periodic tracer       field in a given 2D flow (u, w), which can be an arbitrary       function of x, z, and t."
+    "text": "The code is divided along conceptual lines into problem-agnostic and problem-specific components. Files that contain problem-agnostic parts of the code are stored in /src. Files in /src define the domain, 'AbstractTypes' that supertype problem-specific types, and time-stepper types and routines. Problem-specific modules are stores in /src/physics.Here's an overview of the code structure:/src/\nFourierFlows.jl\nDefines supertyping AbstractParams, AbstractGrid, etc.\nDefines a Problem type to organize the grid, vars, params,   equation, and timestepper into a single structure.\nIncludes all sources files and physics files.\ntimesteppers.jl: defines modules and stepforward! routines for   various time-steppers. Current implemented time-steppers are:\nForward Euler (+ Filtered Forward Euler)\n3rd-order Adams-Bashforth (AB3)\n4th-order Runge-Kutta (RK4)\n4th-order Runge-Kutta Exponential Time Differencing (ETDRK4)\n(+ Filtered ETDRK4)\nphysics/\ntwodturb.jl: Defines a TwoDTurb module that provides a       solver for the two-dimensional vorticity equation.\nbarotropicqg.jl: Defines a BarotropicQG module that provides       several solvers for the barotropic QG model that permit beta,       topography, beta + topography, and forcing.\ntwomodeboussinesq.jl: Defines a TwoModeBoussinesq module       that provides solvers for a two-mode truncation of the       rotating, stratified Boussinesq equation.\ntraceradvdiff.jl: Defines a TracerAdvDiff module that       provides a solver for a two-dimensional and periodic tracer       field in a given 2D flow (u, w), which can be an arbitrary       function of x, z, and t.\ntracerpatcheqn.jl: ..."
 },
 
 {
@@ -45,7 +53,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Home",
     "title": "Writing fast solvers",
     "category": "section",
-    "text": "The performance-intensive part of the code involves just two functions: the timestepping scheme stepforward!, and the function calcNL! that calculates the nonlinear part of the given equation's right-hand side. Optimization of these two functions for a given problem will produce the fastest possible code."
+    "text": "The performance-intensive part of the code involves just two functions: the timestepping scheme stepforward!, and the function calcN! that calculates the nonlinear part of the given equation's right-hand side. Optimization of these two functions for a given problem will produce the fastest possible code."
 },
 
 {
@@ -53,7 +61,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Home",
     "title": "Examples",
     "category": "section",
-    "text": "An example script that simulates decaying two-dimensional turbulence reproducing the results of the paper byMcWilliams, J. C. (1984). The emergence of isolated coherent vortices in turbulent flow. _J. Fluid Mech._, 146, 21-43.is found in examples/twodturb/McWilliams.jl."
+    "text": "An example script that simulates decaying two-dimensional turbulence reproducing the results of the paper byMcWilliams, J. C. (1984). The emergence of isolated coherent vortices in turbulent flow. J. Fluid Mech., 146, 21-43.is found in examples/twodturb/McWilliams.jl."
 },
 
 {
@@ -105,6 +113,14 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "man/docstrings.html#FourierFlows.groupsize-Tuple{JLD2.Group}",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.groupsize",
+    "category": "Method",
+    "text": "Find the number of elements in a JLD2 group. \n\n\n\n"
+},
+
+{
     "location": "man/docstrings.html#FourierFlows.increment!-Tuple{AbstractArray}",
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.increment!",
@@ -121,11 +137,27 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "man/docstrings.html#FourierFlows.savediagnostic-Tuple{FourierFlows.AbstractDiagnostic,String,String}",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.savediagnostic",
+    "category": "Method",
+    "text": "Save diagnostics to file.\n\n\n\n"
+},
+
+{
     "location": "man/docstrings.html#FourierFlows.saveoutput-Tuple{FourierFlows.Output}",
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.saveoutput",
     "category": "Method",
     "text": "Save the current output fields. \n\n\n\n"
+},
+
+{
+    "location": "man/docstrings.html#FourierFlows.saveproblem-Tuple{FourierFlows.AbstractProblem,String}",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.saveproblem",
+    "category": "Method",
+    "text": "Save certain aspects of a Problem. Entire problems cannot be saved in general, because functions cannot be saved (and functions may use arbitrary numbers of global variables that cannot be included in a saved  object). \n\n\n\n"
 },
 
 {
@@ -150,6 +182,14 @@ var documenterSearchIndex = {"docs": [
     "title": "Functions exported from FourierFlows:",
     "category": "section",
     "text": "Modules = [FourierFlows]\nPrivate = false\nOrder = [:function]"
+},
+
+{
+    "location": "man/docstrings.html#FourierFlows.Equation",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.Equation",
+    "category": "Type",
+    "text": "This type defines the linear implicit and explicit components of an equation. The linear implicit part of an equation is defined by an array of coefficients which multiply the solution. The explicit part of an equation is calculated by a function that may define linear and nonlinear parts.\n\n\n\n"
 },
 
 {
