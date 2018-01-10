@@ -165,7 +165,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.saveproblem",
     "category": "Method",
-    "text": "Save certain aspects of a Problem. Entire problems cannot be saved in general, because functions cannot be saved (and functions may use arbitrary numbers of global variables that cannot be included in a saved  object). \n\n\n\n"
+    "text": "Save certain aspects of a Problem. Entire problems cannot be saved in general, because functions cannot be saved (and functions may use arbitrary numbers of global variables that cannot be included in a saved object).\n\n\n\n"
 },
 
 {
