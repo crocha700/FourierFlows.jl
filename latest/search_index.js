@@ -185,14 +185,6 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
-    "location": "man/docstrings.html#FourierFlows.Equation",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.Equation",
-    "category": "Type",
-    "text": "This type defines the linear implicit and explicit components of an equation. The linear implicit part of an equation is defined by an array of coefficients which multiply the solution. The explicit part of an equation is calculated by a function that may define linear and nonlinear parts.\n\n\n\n"
-},
-
-{
     "location": "man/docstrings.html#FourierFlows.ZeroDGrid",
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.ZeroDGrid",
