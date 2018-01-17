@@ -8,22 +8,27 @@ steppersteps = Dict([
   ("FilteredForwardEuler", 1),
   ("AB3", 3),
   ("RK4", 1),
+  ("FilteredRK4", 1),
   ("ETDRK4", 1),
   ("FilteredETDRK4", 1),
 ])
  
 
 """
+    testtwodturbstepforward(n, L, ν, nν; dt=1e-16, nsteps=1, 
+                            stepper="ForwardEuler")
+
 Build a twodturb problem, and use it to test time-stepping methods.
 """
 function testtwodturbstepforward(n=64, L=2π, ν=0.0, nν=2; 
                                  dt=1e-16, nsteps=1, stepper="ForwardEuler")
 
-  g  = TwoDTurb.Grid(n, L)
+  g  = TwoDGrid(n, L)
   p  = TwoDTurb.Params(ν, nν)
   v  = TwoDTurb.Vars(g)
   eq = TwoDTurb.Equation(p, g)
   ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
+  #ts = ForwardEulerTimeStepper(dt, eq.LC; soltype=Complex{Float64})
   
   # Initial condition (IC)
   qi = rand(g.nx, g.ny)
@@ -50,5 +55,6 @@ end
 n = 64 
 
 for (stepper, steps) in steppersteps
+  println(stepper)
   @test testtwodturbstepforward(n; stepper=stepper, nsteps=steps)
 end
