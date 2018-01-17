@@ -7,28 +7,40 @@ using Base.Test
 # Run tests
 tic()
 
-@testset "Grid tests" begin
-    include("test_grid.jl")
+@testset "Grids" begin
+  include("test_grid.jl")
 end
 
-@testset "FFT tests" begin
-    include("test_fft.jl")
+@testset "FFT" begin
+  include("test_fft.jl")
 end
 
-@testset "IFFT tests" begin
-    include("test_ifft.jl")
+@testset "IFFT" begin
+  include("test_ifft.jl")
 end
 
-@testset "Stepper tests" begin
-    include("test_timesteppers.jl")
+@testset "Timesteppers" begin
+  include("test_timesteppers.jl")
+end
+
+@testset "Utils" begin
+  include("test_utils.jl")
+end
+
+@testset "Physics: TwoDTurb           " begin
+  include("test_twodturb.jl")    
+end
+
+@testset "Physics: Cosine Boussinesq  " begin
+  include("test_verticallycosineboussinesq.jl")    
+end
+
+@testset "Physics: Fourier Boussinesq " begin
+  include("test_verticallyfourierboussinesq.jl")    
 end
 
 #@time @testset "BarotropicQG and Timestepper tests" begin
 #    include("test_BarotropicQG_timestep.jl")
 #end
-
-@testset "Utils tests" begin
-    include("test_utils.jl")
-end
 
 println("Total test time: ", toq())

@@ -1,18 +1,26 @@
 using PyPlot, FourierFlows
 import FourierFlows.TwoDTurb
+import FourierFlows.TwoDTurb: energy, enstrophy, dissipation
 
- n, L = 256, 2π   # Domain
+ n,  L = 256, 2π   # Domain
  ν, nν = 1e-6, 1  # Viscosity
-dt, nt = 1, 100   # Time step
+dt, nt = 1, 200   # Time step
+ns = 10
 
 prob = TwoDTurb.InitialValueProblem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt,
   stepper="FilteredRK4")
 TwoDTurb.set_q!(prob, rand(n, n))
 
+E = Diagnostic(energy,      prob, nsteps=nt*ns) 
+Z = Diagnostic(enstrophy,   prob, nsteps=nt*ns) 
+D = Diagnostic(dissipation, prob, nsteps=nt*ns)
+diags = [E, Z, D]
+
 # Step forward
-fig = figure(); tic()
+fig = figure()
+tic()
 for i = 1:10
-  stepforward!(prob, nt)
+  stepforward!(prob, diags, nt)
   TwoDTurb.updatevars!(prob)  
 
   cfl = maximum(prob.vars.U)*prob.grid.dx/prob.ts.dt
