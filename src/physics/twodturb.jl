@@ -1,39 +1,13 @@
 __precompile__()
 module TwoDTurb
 using FourierFlows
-Grid = TwoDGrid
 
 """
-    InitialValueProblem(; parameters...)
-
-Construct an initial-value 2D turbulence problem.
-"""
-function InitialValueProblem(;
-     nx = 256,
-     Lx = 2π,
-     ny = nx,
-     Ly = Lx,
-      ν = 0.0,
-     nν = 1,
-     dt = 0.01,
-stepper = "RK4"
-  )
-
-  g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = TwoDTurb.Params(ν, nν)
-  vs = TwoDTurb.Vars(g)
-  eq = TwoDTurb.Equation(pr, g)
-  ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
-  
-  FourierFlows.Problem(g, vs, pr, eq, ts)
-end
-
-"""
-    ForcedProblem(; parameters...)
+    Problem(; parameters...)
 
 Construct a forced 2D turbulence problem.
 """
-function ForcedProblem(;
+function Problem(;
         nx = 256,
         Lx = 2π,
         ny = nx,
@@ -47,19 +21,40 @@ function ForcedProblem(;
      calcF = nothing
   )
 
-  if calcF == nothing; _calcF(F, sol, t, s, v, p, g) = nothing
-  else;                _calcF = calcF
-  end
-
+  dt = Float64(dt)
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
-  vs = TwoDTurb.ForcedVars(g)
-  eq = TwoDTurb.Equation(pr, g)
-  ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
 
-  FourierFlows.Problem(g, vs, pr, eq, ts)
+  if calcF == nothing
+    pr = TwoDTurb.Params(ν, nν, μ, nμ)
+    vs = TwoDTurb.Vars(g)
+  else
+    pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
+    vs = TwoDTurb.ForcedVars(g)
+  end
+  eq = TwoDTurb.Equation(pr, g)
+  st = FourierFlows.State(Complex{Float64}, (g.nkr, g.nl), dt)
+  ts = FourierFlows.autoconstructtimestepper(stepper, dt, st.sol, g)
+
+  FourierFlows.Problem(g, vs, pr, eq, ts, st)
 end
 
+"""
+    InitialValueProblem(; parameters...)
+
+Construct an initial-value 2D turbulence problem.
+"""
+function InitialValueProblem(; kwargs...)
+  Problem(; kwargs...)
+end
+
+"""
+    ForcedProblem(; parameters...)
+
+Construct a forced 2D turbulence problem.
+"""
+function ForcedProblem(; kwargs...)
+  Problem(; kwargs...)
+end
 
 """
     Params(ν, nν)
@@ -69,7 +64,11 @@ Returns the params for unforced two-dimensional turbulence.
 struct Params <: AbstractParams
   ν::Float64        # Vorticity viscosity
   nν::Int           # Vorticity hyperviscous order
+  μ::Float64        # Bottom drag or hypoviscosity
+  nμ::Float64       # Order of hypodrag
 end
+
+Params(ν, nν) = Params(ν, nν, 0, 0)
 
 """
   ForcedParams(ν, nν, μ, nμ, calcF!)
@@ -86,58 +85,64 @@ struct ForcedParams <: AbstractParams
   calcF!::Function  # Function that calculates the forcing F
 end
 
+Params(ν, nν, μ, nμ, calcF) = ForcedParams(ν, nν, μ, nμ, calcF)
 
 """
     Equation(p, g)
 
 Returns the equation for two-dimensional turbulence with params p and grid g.
 """
-function Equation(p::Params, g::TwoDGrid)
-  LC = -p.ν * g.KKrsq.^p.nν
-  FourierFlows.Equation{2}(LC, calcN_advection!)
-end
-
-function Equation(p::ForcedParams, g::TwoDGrid)
+function Equation(p, g)
   LC = -p.ν*g.KKrsq.^p.nν - p.μ*g.KKrsq.^p.nμ
   LC[1, 1] = 0
-  FourierFlows.Equation{2}(LC, calcN_forced!)
+  FourierFlows.Equation{Complex{Float64},2}(LC, calcN_advection!)
 end
 
+function Equation(p::ForcedParams, g)
+  eq = Equation(p, g) 
+  FourierFlows.Equation{Complex{Float64},2}(eq.LC, calcN_forced!)
+end
 
-# Construct Vars type for unforced two-dimensional turbulence
-physvars = [:q, :U, :V, :psi]
-transvars = [:qh, :Uh, :Vh, :psih]
-expr = FourierFlows.structvarsexpr(:Vars, physvars, transvars)
-eval(expr)
+# Properties of Vars types:
+physifields = [:q, :U, :V, :psi]
+transfields = [ Symbol(fld, :h) for fld in physifields ]
+forcefields = [:F, :F₋₁, :sol₋₁]
 
+fieldspecs = cat(1,
+  FourierFlows.getfieldspecs(physifields, Array{Float64,2}),
+  FourierFlows.getfieldspecs(transfields, Array{Complex{Float64},2}))
+
+forcefieldspecs = cat(1, fieldspecs, 
+  FourierFlows.getfieldspecs(forcefields, Array{Complex{Float64},2}))
+
+# Define Vars type for unforced two-dimensional turbulence
+eval(FourierFlows.getstructexpr(:Vars, fieldspecs; parent=:AbstractVars))
+
+# Define Vars type for forced two-dimensional turbulence
+eval(FourierFlows.getstructexpr(:ForcedVars, forcefieldspecs; 
+  parent=:AbstractVars))
+  
 """
     Vars(g)
 
 Returns the vars for unforced two-dimensional turbulence with grid g.
 """
-function Vars(g::TwoDGrid)
+function Vars(g)
   @createarrays Float64 (g.nx, g.ny) q U V psi
-  @createarrays Complex{Float64} (g.nkr, g.nl) sol qh Uh Vh psih
+  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih
   Vars(q, U, V, psi, qh, Uh, Vh, psih)
 end
-
-# Construct Vars type for forced two-dimensional turbulence
-forcedtransvars = [:qh, :Uh, :Vh, :psih, :F]
-expr = FourierFlows.structvarsexpr(:ForcedVars, physvars, forcedtransvars)
-eval(expr)
-
 
 """
     ForcedVars(g)
 
 Returns the vars for unforced two-dimensional turbulence with grid g.
 """
-function ForcedVars(g::TwoDGrid)
+function ForcedVars(g)
   @createarrays Float64 (g.nx, g.ny) q U V psi
-  @createarrays Complex{Float64} (g.nkr, g.nl) sol qh Uh Vh psih F
-  ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F)
+  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih F F₋₁ sol₋₁
+  ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F, F₋₁, sol₋₁)
 end
-
 
 # Solvers
 function calcN_advection!(
@@ -172,7 +177,6 @@ function calcN_forced!(N::Array{Complex{Float64}, 2},
   @. N += v.F
   nothing
 end
-
 
 # Helper functions
 """
@@ -221,8 +225,9 @@ function set_q!(prob::AbstractProblem, q)
   set_q!(prob.state, prob.vars, prob.grid, q)
 end
 
+# Diagnostics
 """
-    energy(s, v, g)
+    energy(prob)
 
 Returns the domain-averaged kinetic energy in the Fourier-transformed vorticity
 solution s.sol.
@@ -232,12 +237,8 @@ solution s.sol.
   1/(2*g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
-@inline function energy(prob)
-  energy(prob.state, prob.vars, prob.grid)
-end
-
 """
-    enstrophy(s, g)
+    enstrophy(prob)
 
 Returns the domain-averaged enstrophy in the Fourier-transformed vorticity
 solution s.sol.
@@ -246,13 +247,8 @@ solution s.sol.
   1/(2*g.Lx*g.Ly)*FourierFlows.parsevalsum2(s.sol, g)
 end
 
-@inline function enstrophy(prob)
-  enstrophy(prob.state, prob.grid)
-end
-
-
 """
-    dissipation(s, v, p, g)
+    dissipation(prob)
 
 Returns the domain-averaged dissipation rate. nν must be >= 1.
 """
@@ -262,37 +258,35 @@ Returns the domain-averaged dissipation rate. nν must be >= 1.
   p.ν/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
-@inline function dissipation(prob::AbstractProblem)
-  dissipation(prob.state, prob.vars, prob.params, prob.grid)
-end
-
 """
-    injection(s, v, p, g)
+    work(prob)
 
-Returns the domain-averaged rate of injection of energy by the forcing F.
+Returns the domain-averaged work done on the fluid by the forcing F 
+defined by W = -<ψFᵢ> = -Σ ψh conj(F), where <∙> is the domain average,
+Σ denotes a sum over all Fourier modes, ψ is the streamfunction and 
+Fᵢ is the inverse transform of F.
 """
-@inline function injection(s, v::ForcedVars, g)
+function work(s, v::ForcedVars, g)
   @. v.Uh = g.invKKrsq * s.sol * conj(v.F)
   1/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
-@inline function injection(prob::AbstractProblem)
-  injection(prob.state, prob.vars, prob.grid)
-end
-
 """
-    drag(s, v, p, g)
+    drag(prob)
 
 Returns the extraction of domain-averaged energy by drag μ.
 """
-@inline function drag(s, v::ForcedVars, p::ForcedParams, g)
+function drag(s, v::ForcedVars, p::ForcedParams, g)
   @. v.Uh = g.KKrsq^(p.nμ-1) * abs2(s.sol)
   @. v.Uh[1, 1] = 0
   p.μ/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
-@inline function drag(prob::AbstractProblem)
-  drag(prob.state, prob.vars, prob.params, prob.grid) 
-end
+@inline      energy(prob) = energy(prob.state, prob.vars, prob.grid)
+@inline   enstrophy(prob) = enstrophy(prob.state, prob.grid)
+@inline        drag(prob) = drag(prob.state, prob.vars, prob.params, prob.grid) 
+@inline        work(prob) = work(prob.state, prob.vars, prob.grid)
+@inline dissipation(prob) = dissipation(prob.state, prob.vars, prob.params, 
+                                        prob.grid)
 
 end # module
