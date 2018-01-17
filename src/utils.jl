@@ -27,21 +27,25 @@ Returns a time-stepper type defined by the prefix 'stepper', timestep dt
 solution sol (used to construct variables with identical type and size as
 the solution vector), and grid g.
 """
-function autoconstructtimestepper(stepper, dt, sol, 
+function autoconstructtimestepper(stepper, dt, LC, 
                                   g::AbstractGrid=ZeroDGrid(1))
   fullsteppername = Symbol(stepper, :TimeStepper)
   if stepper ∈ filteredsteppers
-    tsexpr = Expr(:call, fullsteppername, dt, sol, g)
+    tsexpr = Expr(:call, fullsteppername, dt, LC, g)
   else
-    tsexpr = Expr(:call, fullsteppername, dt, sol)
+    tsexpr = Expr(:call, fullsteppername, dt, LC)
   end
-
   eval(tsexpr)
 end
 
-function autoconstructtimestepper(stepper, dt, solc, solr)
+function autoconstructtimestepper(stepper, dt, LCc, LCr, 
+                                  g::AbstractGrid=ZeroDGrid(1))
   fullsteppername = Symbol(stepper, :TimeStepper)
-  tsexpr = Expr(:call, fullsteppername, dt, solc, solr)
+  if stepper ∈ filteredsteppers
+    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr, g)
+  else
+    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr)
+  end
   eval(tsexpr)
 end
 
@@ -62,29 +66,28 @@ end
 
 
 """
-This function returns an expression that defines a Composite Type
-of the AbstractVars variety.
-"""
-function structvarsexpr(name, physfields, transfields; soldims=2, vardims=2, 
-                          parent=:AbstractVars) 
-  
-  physexprs = [:( $fld::Array{Float64,$vardims} ) 
-    for fld in physfields]
-  transexprs = [:( $fld::Array{Complex{Float64},$vardims} ) 
-    for fld in transfields]
+    getstructexpr(name, fieldspecs; parent=nothing)
 
-  if parent != nothing
+Returns an expression that defines a composite type whose fields are given by
+the name::type pairs specifed by the tuples in fieldspecs. The convention is
+name = fieldspecs[i][1] and type = fieldspecs[i][2] for the ith element of 
+fieldspecs.
+"""
+function getstructexpr(name, fieldspecs; parent=nothing)
+  # name = spec[1]; type = spec[2]
+  # example: fieldspecs[1] = (:u, Array{Float64,2})
+  fieldexprs = [ :( $(spec[1])::$(spec[2]) ) for spec in fieldspecs ]
+
+  if parent == nothing
     expr = quote
-      mutable struct $name <: $parent
-        $(physexprs...)
-        $(transexprs...)
+      struct $name
+        $(fieldexprs...)
       end
     end
   else
     expr = quote
-      mutable struct $name
-        $(physexprs...)
-        $(transexprs...)
+      struct $name <: $parent
+        $(fieldexprs...)
       end
     end
   end
@@ -92,6 +95,16 @@ function structvarsexpr(name, physfields, transfields; soldims=2, vardims=2,
   expr
 end
 
+"""
+    getfieldspecs(fieldnames, fieldtype)
+
+Returns an array of (fieldname[i], fieldtype) tuples that can be given to the 
+function getstructexpr. This function makes it convenient to construct 
+fieldspecs for lists of variables of the same type.
+"""
+getfieldspecs(fieldnames, fieldtype) = collect(
+  zip(fieldnames, [ fieldtype for name in fieldnames ]))
+  
 
 """
     fftwavenums(n; L=1)
@@ -227,15 +240,13 @@ Accounts for DFT normalization, grid resolution, and whether or not uh
 is the product of fft or rfft.
 """
 function parsevalsum2(uh, g::TwoDGrid)
-  norm = g.Lx*g.Ly/(g.nx^2*g.ny^2)    # weird normalization for dft
-
-  if size(uh)[1] == g.nkr             # uh is conjugate symmetric
-    U = sum(abs2, uh[1, :])           # k=0 modes
-    U += 2*sum(abs2, uh[2:end, :])    # sum k>0 modes twice     
-  else                                # count every mode once
-    U = sum(abs2, uh)
+  if size(uh)[1] == g.nkr                    # uh is conjugate symmetric
+    @views U = sum(abs2, uh[1, :])           # k=0 modes
+    @views U += 2*sum(abs2, uh[2:end, :])    # sum k>0 modes twice     
+  else                                       # count every mode once
+    U = sum(abs2, uh)                   
   end
-
+  norm = g.Lx*g.Ly/(g.nx^2*g.ny^2)           # weird normalization for dft
   norm*U
 end
 
@@ -247,18 +258,15 @@ grid resolution, and whether or not uh is in a conjugate-symmetric form to
 save memory.
 """ 
 function parsevalsum(uh, g::TwoDGrid)
-  norm = g.Lx*g.Ly/(g.nx^2*g.ny^2) # weird normalization for dft
-
-  if size(uh)[1] == g.nkr       # uh is conjugate symmetric
-    U = sum(uh[1, :])           # k=0 modes
-    U += 2*sum(uh[2:end, :])    # sum k>0 modes twice     
-  else # count every mode once
+  if size(uh)[1] == g.nkr               # uh is conjugate symmetric
+    @views U = sum(uh[1, :])            # k=0 modes
+    @views U += 2*sum(uh[2:end, :])     # sum k>0 modes twice     
+  else                                  # count every mode once
     U = sum(uh)
   end
-
+  norm = g.Lx*g.Ly/(g.nx^2*g.ny^2) # weird normalization for dft
   norm*real(U)
 end
-
 
 """
     jacobianh(a, b, g)
@@ -311,8 +319,8 @@ represented on the polar grid.
 """
 function radialspectrum(ah, g::TwoDGrid; n=nothing, m=nothing, refinement=4)
 
-  if n == nothing; n = refinement*maximum([g.nk, g.nl]); end
-  if m == nothing; m = refinement*maximum([g.nk, g.nl]); end
+  if n == nothing; n = round(Int, refinement*maximum([g.nk, g.nl])); end
+  if m == nothing; m = round(Int, refinement*maximum([g.nk, g.nl])); end
 
   if size(ah)[1] == g.nkr       # conjugate symmetric form
     m = Int(m/2)                # => half resolution in θ
@@ -353,8 +361,8 @@ end
 
 # Moments and cumulants
 domainaverage(c, g) = g.dx*g.dy*sum(c)/(g.Lx*g.Ly)
-moment_x(c, g, n) = g.dx*g.dy*sum(g.X.^n.*c)
-moment_y(c, g, n) = g.dx*g.dy*sum(g.Y.^n.*c)
+xmoment(c, g::TwoDGrid, n=1) = sum(g.X.^n.*c)/(sum(c)*g.Lx*g.Ly)
+ymoment(c, g::TwoDGrid, n=1) = sum(g.Y.^n.*c)/(sum(c)*g.Lx*g.Ly)
 
 cumulant_1x(c, g) = g.dx*g.dy*sum(g.X.*c) / domainaverage(c, g)
 cumulant_1y(c, g) = g.dx*g.dy*sum(g.Y.*c) / domainaverage(c, g)
