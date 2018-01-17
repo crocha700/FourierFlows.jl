@@ -18,6 +18,13 @@ abstract type AbstractProblem end
 abstract type AbstractEquation end
 abstract type AbstractState end
 
+"""
+    cxeltype(a)
+
+Returns Complex{eltype(a)} if eltype(a) <: Real; eltype(a) otherwise.
+"""
+cxeltype(a) = eltype(a) <: Real ? Complex{eltype(a)} : eltype(a)
+
 # Include base functionality
 include("problemstate.jl")
 include("domains.jl")
@@ -29,8 +36,10 @@ include("timesteppers.jl")
 # Include physics modules
 include("physics/twodturb.jl")
 include("physics/barotropicqg.jl")
-include("physics/twomodeboussinesq.jl")
+include("physics/verticallyfourierboussinesq.jl")
+include("physics/verticallycosineboussinesq.jl")
 include("physics/traceradvdiff.jl")
-include("physics/tracerpatcheqn.jl")
+
+#include("physics/tracerpatcheqn.jl")
 
 end # module

@@ -1,14 +1,12 @@
 export ForwardEulerTimeStepper, FilteredForwardEulerTimeStepper,
-       AB3TimeStepper,
-       RK4TimeStepper,
-       ETDRK4TimeStepper, FilteredETDRK4TimeStepper
+       RK4TimeStepper, FilteredRK4TimeStepper,
+       ETDRK4TimeStepper, FilteredETDRK4TimeStepper,
+       AB3TimeStepper
 
 export stepforward!
 
 
-
-
-# Looping stepforward function ------------------------------------------------
+# Looping stepforward function
 """
     stepforward!(prob)
 
@@ -21,7 +19,6 @@ function stepforward!(prob::Problem)
     prob.step = prob.state.step
 end
 
-
 """
     stepforward!(prob, nsteps)
 
@@ -33,7 +30,6 @@ function stepforward!(prob::Problem, nsteps)
   end
   nothing
 end
-
 
 """
     stepforward!(prob, diags, nsteps)
@@ -65,127 +61,238 @@ function stepforward!(prob::Problem, diags::AbstractArray, nsteps)
 end
 
 
-
-# Utilities -------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------- 
+# Timestepper utilities -------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------- 
 """
-Calculate ETDRK4 coefficients by integrating over a small circle
-in complex space.
+    getetdcoeffs(dt, LC; ncirc=32, rcirc=1)
+
+Calculate ETDRK4 coefficients associated with the (diagonal) linear coefficient
+LC by integrating over a small circle in complex space.
+
+Note: arbitrary-precision arithmetic might provide a more robust method for 
+calculating these coefficients.
 """
-function getetdcoeffs(dt::Float64, LC::Array{Complex{Float64},2};
-  ncirc=32, rcirc=1.0)
+function getetdcoeffs(dt, LC; ncirc=32, rcirc=typeof(dt)(1))
 
-  # Make circle
-  circ  = Array{Complex{Float64}}(1, 1, ncirc)
-  circ[1, 1, :]  = rcirc * exp.( 2.0*pi*im*(0.5:1.0:(ncirc-0.5))/ncirc )
+  shape = Tuple(cat(1, ncirc, ones(Int, ndims(LC))))
+  circ = zeros(cxeltype(LC), shape)
+  circ .= rcirc * exp.(2π*im/ncirc*(0.5:1:(ncirc-0.5)))
+  circ = permutedims(circ, ndims(circ):-1:1)
 
-  # Construct intermediate vars
-  zc = broadcast(+, dt.*LC, circ)
+  zc = dt*LC .+ circ
+  M = ndims(LC)+1
 
   # Four coefficients: ζ, α, β, Γ
-  ζ = dt.*squeeze(mean( (exp.(0.5.*zc)-1.0)./zc, 3), 3)
+  ζ = @. dt*$squeeze($mean(
+                  (exp(zc/2)-1) / zc, M), M)
+  α = @. dt*$squeeze($mean(
+     ( -4 - zc + exp(zc)*(4 - 3zc + zc^2)) / zc^3, M), M)
+  β = @. dt*$squeeze($mean(
+         ( 2  + zc + exp(zc)*(-2 + zc))/zc^3, M), M)
+  Γ = @. dt*$squeeze($mean(
+     ( -4 - 3zc - zc^2 + exp(zc)*(4 - zc))/zc^3, M), M)
 
-  α = dt.*squeeze(mean(
-    ( (-4.0) .- zc .+ exp.(zc).*(4.0.-3.0.*zc.+zc.^2.0))./zc.^3.0,      3), 3)
-  β = dt.*squeeze(mean(
-    (   2.0  .+ zc .+ exp.(zc).*((-2.0).+zc))./zc.^3.0,                 3), 3)
-  Γ = dt.*squeeze(mean(
-    ( (-4.0) .- 3.0.*zc .- zc.^2.0 .+ exp.(zc).*(  4.0 .-zc))./zc.^3.0, 3), 3)
-
-  return ζ, α, β, Γ
+  ζ, α, β, Γ
 end
 
 
-"""
-Calculate ETDRK4 coefficients by integrating over a small circle
-in complex space.
-"""
-function getetdcoeffs(dt::Float64, LC::Array{Complex{Float64},3};
-  ncirc=32, rcirc=1.0)
-
-  # Make circle
-  circ  = Array{Complex{Float64}}(1, 1, 1, ncirc)
-  circ[1, 1, 1, :]  = rcirc * exp.( 2.0*pi*im*(0.5:1.0:(ncirc-0.5))/ncirc )
-
-  # Construct intermediate vars
-  zc = broadcast(+, dt.*LC, circ)
-
-  # Four coefficients: ζ, α, β, Γ
-  ζ = dt.*squeeze(mean( (exp.(0.5.*zc)-1.0)./zc, 4), 4)
-
-  α = dt.*squeeze(mean(
-    ( (-4.0) .- zc .+ exp.(zc).*(4.0.-3.0.*zc.+zc.^2.0))./zc.^3.0,      4), 4)
-  β = dt.*squeeze(mean(
-    (   2.0  .+ zc .+ exp.(zc).*((-2.0).+zc))./zc.^3.0,                 4), 4)
-  Γ = dt.*squeeze(mean(
-    ( (-4.0) .- 3.0.*zc .- zc.^2.0 .+ exp.(zc).*(  4.0 .-zc))./zc.^3.0, 4), 4)
-
-  return ζ, α, β, Γ
-end
-
-
-
+# ----------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------- 
+# Timesteppers
+# ----------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------- 
 
 
 # Forward Euler ---------------------------------------------------------------
 # The simplest time-stepping method in the books. Explicit and 1st-order
 # accurate.
 
-struct ForwardEulerTimeStepper{dim} <: AbstractTimeStepper
-  dt::Float64
-  N::Array{Complex{Float64},dim}    # Explicit linear and nonlinear terms
+struct ForwardEulerTimeStepper{Tdt,Tsol,dim} <: AbstractTimeStepper
+  dt::Tdt
+  N::Array{Tsol,dim}    # Explicit linear and nonlinear terms
 end
 
-function ForwardEulerTimeStepper(dt::Float64, sol::AbstractArray)
-  N = zeros(sol)
-  ForwardEulerTimeStepper{ndims(LC)}(dt, N)
+struct FilteredForwardEulerTimeStepper{Tdt,Tsol,dim} <: AbstractTimeStepper
+  dt::Tdt
+  N::Array{Tsol,dim}      # Explicit linear and nonlinear terms
+  filter::Array{Tdt,dim}  # Filter for solution
 end
 
+ForwardEulerTimeStepper(dt, LC; soltype=cxeltype(LC)) = (
+  ForwardEulerTimeStepper(dt, zeros(soltype, size(LC))))
+  
 
+function FilteredForwardEulerTimeStepper(
+  dt, LC, g; soltype=cxeltype(LC), filterkwargs...) 
+  filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
+  FilteredForwardEulerTimeStepper(dt, zeros(soltype, size(LC)), filter)
+end
 
-
-function stepforward!(s::State, ts::ForwardEulerTimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
-
+function stepforward!(s, ts::ForwardEulerTimeStepper, eq, v, p, g)
   eq.calcN!(ts.N, s.sol, s.t, s, v, p, g)
-
   @. s.sol += ts.dt*(ts.N + eq.LC*s.sol)
+  s.t += ts.dt
+  s.step += 1
+  nothing
+end
+
+function stepforward!(s, ts::FilteredForwardEulerTimeStepper, eq, v, p, g)
+  eq.calcN!(ts.N, s.sol, s.t, s, v, p, g)
+  @. s.sol = ts.filter*(s.sol + ts.dt*(ts.N + eq.LC.*s.sol) )
+  s.t += ts.dt
+  s.step += 1
+  nothing
+end
+
+
+# RK4 -------------------------------------------------------------------------
+# RK4 is the classical explicit 4th-order Runge-Kutta time-stepping
+# method. It uses a series of substeps/estimators to achieve 4th-order
+# accuracy over each individual time-step, at the cost of requiring
+# relatively more evaluations of the nonlinear right hand side.
+# It is described, among other places, in Bewley's Numerical
+# Renaissance.
+
+abstract type AbstractRK4TimeStepper <: AbstractTimeStepper end
+abstract type AbstractDualRK4TimeStepper <: AbstractTimeStepper end
+
+struct RK4TimeStepper{Tdt,Tsol,dim} <: AbstractRK4TimeStepper
+  dt::Tdt
+  sol₁::Array{Tsol,dim}
+  RHS₁::Array{Tsol,dim}
+  RHS₂::Array{Tsol,dim}
+  RHS₃::Array{Tsol,dim}
+  RHS₄::Array{Tsol,dim}
+end
+
+struct FilteredRK4TimeStepper{Tdt,Tsol,dim} <: AbstractRK4TimeStepper
+  dt::Tdt
+  sol₁::Array{Tsol,dim}
+  RHS₁::Array{Tsol,dim}
+  RHS₂::Array{Tsol,dim}
+  RHS₃::Array{Tsol,dim}
+  RHS₄::Array{Tsol,dim}
+  filter::Array{Tdt,dim}
+end
+
+struct DualRK4TimeStepper{Tdt,Tc,Tr,dimc,dimr} <: AbstractDualRK4TimeStepper
+  dt::Tdt
+  c::RK4TimeStepper{Tdt,Tc,dimc}
+  r::RK4TimeStepper{Tdt,Tr,dimr}
+end
+
+struct DualFilteredRK4TimeStepper{Tdt,Tc,Tr,dimc,dimr} <: AbstractDualRK4TimeStepper
+  dt::Tdt
+  c::FilteredRK4TimeStepper{Tc,dimc}
+  r::FilteredRK4TimeStepper{Tr,dimr}
+end
+
+function RK4TimeStepper(dt, LC; soltype=cxeltype(LC))
+  @createarrays soltype size(LC) sol₁ RHS₁ RHS₂ RHS₃ RHS₄
+  RK4TimeStepper(dt, sol₁, RHS₁, RHS₂, RHS₃, RHS₄)
+end
+
+function FilteredRK4TimeStepper(dt, LC, g; soltype=cxeltype(LC), 
+                                filterkwargs...)
+  @createarrays soltype size(LC) sol₁ RHS₁ RHS₂ RHS₃ RHS₄
+  filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
+  FilteredRK4TimeStepper(dt, sol₁, RHS₁, RHS₂, RHS₃, RHS₄, filter)
+end
+
+function RK4TimeStepper(dt, LCc, LCr; solctype=cxeltype(LCc), 
+                        solrtype=cxeltype(LCr))
+  c = RK4TimeStepper(dt, LCc; soltype=solctype)
+  r = RK4TimeStepper(dt, LCr; soltype=solrtype)
+  DualRK4TimeStepper(dt, c, r)
+end
+
+function FilteredRK4TimeStepper(dt, LCc, LCr, g; filterkwargs...)
+  c = FilteredRK4TimeStepper(dt, LCc, g)
+  r = FilteredRK4TimeStepper(dt, LCr, g)
+  DualFilteredRK4TimeStepper(dt, c, r)
+end
+
+function stepRK4!(s, ts::AbstractRK4TimeStepper, eq, v, p, g)
+  eq.calcN!(ts.RHS₁, s.sol, s.t, s, v, p, g)
+  @. ts.RHS₁ += eq.LC*s.sol
+  # Substep 1
+  t2 = s.t + 0.5*ts.dt
+  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₁
+  eq.calcN!(ts.RHS₂, ts.sol₁, t2, s, v, p, g)
+  @. ts.RHS₂ += eq.LC*ts.sol₁
+  # Substep 2
+  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₂
+  eq.calcN!(ts.RHS₃, ts.sol₁, t2, s, v, p, g)
+  @. ts.RHS₃ += eq.LC*ts.sol₁
+  # Substep 3
+  t3 = s.t + ts.dt
+  @. ts.sol₁ = s.sol + ts.dt*ts.RHS₃
+  eq.calcN!(ts.RHS₄, ts.sol₁, t3, s, v, p, g)
+  @. ts.RHS₄ += eq.LC*ts.sol₁
+
+  # Substep 4 and final step
+  @. s.sol += ts.dt*(   1.0/6.0*ts.RHS₁ + 1.0/3.0*ts.RHS₂
+                      + 1.0/3.0*ts.RHS₃ + 1.0/6.0*ts.RHS₄ )
   s.t += ts.dt
   s.step += 1
 
   nothing
 end
 
+function stepRK4!(s, ts::AbstractDualRK4TimeStepper, eq, v, p, g)
+  eq.calcN!(ts.c.RHS₁, ts.r.RHS₁, s.solc, s.solr, s.t, s, v, p, g)
+  @. ts.c.RHS₁ += eq.LCc*s.solc
+  @. ts.r.RHS₁ += eq.LCr*s.solr
+  # Substep 1
+  t2 = s.t + 0.5*ts.dt
+  @. ts.c.sol₁ = s.solc + 0.5*ts.dt*ts.c.RHS₁
+  @. ts.r.sol₁ = s.solr + 0.5*ts.r.dt*ts.r.RHS₁
+  eq.calcN!(ts.c.RHS₂, ts.r.RHS₂, ts.c.sol₁, ts.r.sol₁, t2, s, v, p, g)
+  @. ts.c.RHS₂ += eq.LCc*ts.c.sol₁
+  @. ts.r.RHS₂ += eq.LCr*ts.r.sol₁
+  # Substep 2
+  @. ts.c.sol₁ = s.solc + 0.5*ts.dt*ts.c.RHS₂
+  @. ts.r.sol₁ = s.solr + 0.5*ts.dt*ts.r.RHS₂
+  eq.calcN!(ts.c.RHS₃, ts.r.RHS₃, ts.c.sol₁, ts.r.sol₁, t2, s, v, p, g)
+  @. ts.c.RHS₃ += eq.LCc*ts.c.sol₁
+  @. ts.r.RHS₃ += eq.LCr*ts.r.sol₁
+  # Substep 3
+  t3 = s.t + ts.dt
+  @. ts.c.sol₁ = s.solc + ts.dt*ts.c.RHS₃
+  @. ts.r.sol₁ = s.solr + ts.dt*ts.r.RHS₃
+  eq.calcN!(ts.c.RHS₄, ts.r.RHS₄, ts.c.sol₁, ts.r.sol₁, t3, s, v, p, g)
+  @. ts.c.RHS₄ += eq.LCc*ts.c.sol₁
+  @. ts.r.RHS₄ += eq.LCr*ts.r.sol₁
 
+  # Substep 4 and final step
+  @. s.solc += ts.dt*(  1.0/6.0*ts.c.RHS₁ + 1.0/3.0*ts.c.RHS₂
+                       + 1.0/3.0*ts.c.RHS₃ + 1.0/6.0*ts.c.RHS₄ )
 
+  @. s.solr += ts.dt*(   1.0/6.0*ts.r.RHS₁ + 1.0/3.0*ts.r.RHS₂
+                       + 1.0/3.0*ts.r.RHS₃ + 1.0/6.0*ts.r.RHS₄ )
 
-
-
-
-
-# Filtered Forward Euler ------------------------------------------------------
-# The simplest time-stepping method in the books. Explicit and 1st-order
-# accurate.
-
-struct FilteredForwardEulerTimeStepper{dim} <: AbstractTimeStepper
-  dt::Float64
-  N::Array{Complex{Float64},dim}    # Explicit linear and nonlinear terms
-  filter::Array{Float64,dim}        # Filter for solution
-end
-
-function FilteredForwardEulerTimeStepper(dt, LC, g; filterkwargs...)
-  N = zeros(LC)
-  filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
-  FilteredForwardEulerTimeStepper{ndims(N)}(dt, N, filter)
-end
-
-function stepforward!(s::State, ts::FilteredForwardEulerTimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
-  eq.calcN!(ts.N, s.sol, s.t, s, v, p, g)
-  @. s.sol = ts.filter*(s.sol + ts.dt*(ts.N + eq.LC.*s.sol) )
   s.t += ts.dt
   s.step += 1
+
+  nothing
+end
+
+stepforward!(s, ts::RK4TimeStepper, eq, v, p, g) = stepRK4!(s, ts, eq, v, p, g) 
+stepforward!(s, ts::DualRK4TimeStepper, eq, v, p, g) = stepRK4!(s, ts, eq, v, p, g)  
+
+function stepforward!(s, ts::FilteredRK4TimeStepper, eq, v, p, g)
+  stepRK4!(s, ts, eq, v, p, g)
+  @. s.sol *= ts.filter
+  nothing
+end
+
+function stepforward!(s, ts::DualFilteredRK4TimeStepper, eq, v, p, g)
+  stepRK4!(s, ts, eq, v, p, g) 
+  @. s.solc *= ts.c.filter
+  @. s.solr *= ts.r.filter
   nothing
 end
 
@@ -195,82 +302,96 @@ end
 # of the equation, explicit and 4th-order accurate integration of nonlinear
 # parts of equation.
 
-struct ETDRK4TimeStepper{dim} <: AbstractTimeStepper
-  dt::Float64
-  LC::Array{Complex{Float64},dim}          # Linear coefficient
-  # ETDRK4 coefficents
-  ζ::Array{Complex{Float64},dim}
-  α::Array{Complex{Float64},dim}
-  β::Array{Complex{Float64},dim}
-  Γ::Array{Complex{Float64},dim}
-  expLCdt::Array{Complex{Float64},dim}     # Precomputed exp(LC*dt)
-  expLCdt2::Array{Complex{Float64},dim}    # Precomputed exp(LC*dt/2)
+abstract type AbstractETDRK4TimeStepper <: AbstractTimeStepper end
+abstract type AbstractDualETDRK4TimeStepper <: AbstractTimeStepper end
 
+struct ETDRK4TimeStepper{Tdt,Tsol,dim} <: AbstractETDRK4TimeStepper
+  dt::Tdt
+  LC::Array{Tsol,dim}          # Linear coefficient
+  # ETDRK4 coefficents
+  ζ::Array{Tsol,dim}
+  α::Array{Tsol,dim}
+  β::Array{Tsol,dim}
+  Γ::Array{Tsol,dim}
+  expLCdt::Array{Tsol,dim}     # Precomputed exp(LC*dt)
+  expLCdt2::Array{Tsol,dim}    # Precomputed exp(LC*dt/2)
   # Intermediate times, solutions, and nonlinear evaluations
-  sol₁::Array{Complex{Float64},dim}
-  sol₂::Array{Complex{Float64},dim}
-  N₁::Array{Complex{Float64},dim}
-  N₂::Array{Complex{Float64},dim}
-  N₃::Array{Complex{Float64},dim}
-  N₄::Array{Complex{Float64},dim}
+  sol₁::Array{Tsol,dim}
+  sol₂::Array{Tsol,dim}
+  N₁::Array{Tsol,dim}
+  N₂::Array{Tsol,dim}
+  N₃::Array{Tsol,dim}
+  N₄::Array{Tsol,dim}
 end
 
-function ETDRK4TimeStepper(dt, LC)
+struct FilteredETDRK4TimeStepper{Tdt,Tsol,dim} <: AbstractETDRK4TimeStepper
+  dt::Tdt
+  LC::Array{Tsol,dim}       # Linear coefficient
+  # ETDRK4 coefficents
+  ζ::Array{Tsol,dim}
+  α::Array{Tsol,dim}
+  β::Array{Tsol,dim}
+  Γ::Array{Tsol,dim}
+  expLCdt::Array{Tsol,dim}  # Precomputed exp(LC*dt)
+  expLCdt2::Array{Tsol,dim} # Precomputed exp(LC*dt/2)
+  # Intermediate times, solutions, and nonlinear evaluations
+  sol₁::Array{Tsol,dim}
+  sol₂::Array{Tsol,dim}
+  N₁::Array{Tsol,dim}
+  N₂::Array{Tsol,dim}
+  N₃::Array{Tsol,dim}
+  N₄::Array{Tsol,dim}
+  filter::Array{Tdt,dim}    # Filter for solution
+end
+
+struct DualETDRK4TimeStepper{Tdt,Tc,Tr,dimc,dimr} <: AbstractDualETDRK4TimeStepper
+  dt::Tdt
+  c::ETDRK4TimeStepper{Tc,dimc}
+  r::ETDRK4TimeStepper{Tr,dimr}
+end
+
+struct DualFilteredETDRK4TimeStepper{Tdt,Tc,Tr,dimc,dimr} <: AbstractTimeStepper
+  dt::Tdt
+  c::FilteredETDRK4TimeStepper{Tc,dimc}
+  r::FilteredETDRK4TimeStepper{Tr,dimr}
+end
+
+function ETDRK4TimeStepper(dt, LC; soltype=cxeltype(LC))
   expLCdt  = exp.(dt*LC)
   expLCdt2 = exp.(0.5*dt*LC)
   ζ, α, β, Γ = getetdcoeffs(dt, LC)
-  @createarrays eltype(LC) size(LC) sol₁ sol₂ N₁ N₂ N₃ N₄
-  ETDRK4TimeStepper{ndims(LC)}(dt, LC, ζ, α, β, Γ, expLCdt,
+  @createarrays soltype size(LC) sol₁ sol₂ N₁ N₂ N₃ N₄
+  ETDRK4TimeStepper(dt, LC, ζ, α, β, Γ, expLCdt,
     expLCdt2, sol₁, sol₂, N₁, N₂, N₃, N₄)
 end
 
-
-
-
-# Filtered ETDRK4 --------------------------------------------------------------
-# The Rolls-Royce of time-stepping. Exact treatment of linear part of
-# the equation, explicit and 4th-order accurate integration of nonlinear
-# parts of equation.
-
-struct FilteredETDRK4TimeStepper{dim} <: AbstractTimeStepper
-  dt::Float64
-  LC::Array{Complex{Float64}, dim}          # Linear coefficient
-  # ETDRK4 coefficents
-  ζ::Array{Complex{Float64}, dim}
-  α::Array{Complex{Float64}, dim}
-  β::Array{Complex{Float64}, dim}
-  Γ::Array{Complex{Float64}, dim}
-  expLCdt::Array{Complex{Float64}, dim}     # Precomputed exp(LC*dt)
-  expLCdt2::Array{Complex{Float64}, dim}    # Precomputed exp(LC*dt/2)
-  # Intermediate times, solutions, and nonlinear evaluations
-  sol₁::Array{Complex{Float64}, dim}
-  sol₂::Array{Complex{Float64}, dim}
-  N₁::Array{Complex{Float64}, dim}
-  N₂::Array{Complex{Float64}, dim}
-  N₃::Array{Complex{Float64}, dim}
-  N₄::Array{Complex{Float64}, dim}
-  filter::Array{Complex{Float64}, dim}    # Filter for solution
-end
-
-
-function FilteredETDRK4TimeStepper(dt, LC, g; filterkwargs...)
+function FilteredETDRK4TimeStepper(dt, LC, g; 
+  soltype=cxeltype(LC), filterkwargs...)
+ 
   expLCdt  = exp.(dt*LC)
   expLCdt2 = exp.(0.5*dt*LC)
   ζ, α, β, Γ = getetdcoeffs(dt, LC)
-
-  @createarrays eltype(LC) size(LC) sol₁ sol₂ N₁ N₂ N₃ N₄
-
+  @createarrays soltype size(LC) sol₁ sol₂ N₁ N₂ N₃ N₄
   filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
-
-  FilteredETDRK4TimeStepper{ndims(LC)}(dt, LC, ζ, α, β, Γ,
-        expLCdt, expLCdt2, sol₁, sol₂, N₁, N₂, N₃, N₄, filter)
+  FilteredETDRK4TimeStepper(dt, LC, ζ, α, β, Γ, expLCdt, expLCdt2, 
+    sol₁, sol₂, N₁, N₂, N₃, N₄, filter)
 end
 
+function ETDRK4TimeStepper(dt, LCc, LCr; solctype=cxeltype(LCc), 
+                           solrtype=cxeltype(LCr))
+  c = ETDRK4TimeStepper(dt, LCc; soltype=solctype)
+  r = ETDRK4TimeStepper(dt, LCr; soltype=solrtype)
+  DualETDRK4TimeStepper(dt, c, r)
+end
 
+function FilteredETDRK4TimeStepper(
+  dt, LCc, LCr, g; solctype=cxeltype(LCc), solrtype=cxeltype(LCr))
+  c = FilteredETDRK4TimeStepper(dt, LCc, g; soltype=solctype)
+  r = FilteredETDRK4TimeStepper(dt, LCr, g; soltype=solrtype)
+  DualFilteredETDRK4TimeStepper(dt, c, r)
+end
 
-function stepforward!(s::State, ts::ETDRK4TimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
+function stepETDRK4!(s, ts::AbstractETDRK4TimeStepper, eq, v, p, g)
   # Substep 1
   eq.calcN!(ts.N₁, s.sol, s.t, s, v, p, g)
   @. ts.sol₁ = ts.expLCdt2*s.sol + ts.ζ*ts.N₁
@@ -295,50 +416,7 @@ function stepforward!(s::State, ts::ETDRK4TimeStepper,
   nothing
 end
 
-function stepforward!(s::State, ts::FilteredETDRK4TimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
-  # Substep 1
-  eq.calcN!(ts.N₁, s.sol, s.t, s, v, p, g)
-  @. ts.sol₁ = ts.expLCdt2*s.sol + ts.ζ*ts.N₁
-  # Substep 2
-  t2 = s.t + 0.5*ts.dt
-  eq.calcN!(ts.N₂, ts.sol₁, t2, s, v, p, g)
-  @. ts.sol₂ = ts.expLCdt2*s.sol + ts.ζ*ts.N₂
-  # Substep 3
-  eq.calcN!(ts.N₃, ts.sol₂, t2, s, v, p, g)
-  @. ts.sol₂ = ts.expLCdt2*ts.sol₁ + ts.ζ*(2.0*ts.N₃ - ts.N₁)
-  # Substep 4
-  t3 = s.t + ts.dt
-  eq.calcN!(ts.N₄, ts.sol₂, t3, s, v, p, g)
-
-  # Update
-  @. s.sol = ts.filter*(ts.expLCdt*s.sol +     ts.α * ts.N₁
-                                         + 2.0*ts.β * (ts.N₂ + ts.N₃)
-                                         +     ts.Γ * ts.N₄ )
-  s.t += ts.dt
-  s.step += 1
-
-  nothing
-end
-
-
-
-struct DualETDRK4TimeStepper{dimc, dimr} <: AbstractTimeStepper
-  dt::Float64
-  c::ETDRK4TimeStepper{dimc}
-  r::ETDRK4TimeStepper{dimr}
-end
-
-function ETDRK4TimeStepper(dt, LCc, LCr)
-  c = ETDRK4TimeStepper(dt, LCc)
-  r = ETDRK4TimeStepper(dt, LCr)
-  DualETDRK4TimeStepper{ndims(LCc), ndims(LCr)}(dt, c, r)
-end
-
-function stepforward!(s::DualState, ts::DualETDRK4TimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
+function stepETDRK4!(s, ts::AbstractDualETDRK4TimeStepper, eq, v, p, g)
   # Substep 1
   eq.calcN!(ts.c.N₁, ts.r.N₁, s.solc, s.solr, s.t, s, v, p, g)
   @. ts.c.sol₁ = ts.c.expLCdt2*s.solc + ts.c.ζ*ts.c.N₁
@@ -371,128 +449,41 @@ function stepforward!(s::DualState, ts::DualETDRK4TimeStepper,
   nothing
 end
 
+stepforward!(s, ts::ETDRK4TimeStepper, eq, v, p, g) = stepETDRK4!(s, ts, eq, v, p, g)
+stepforward!(s, ts::DualETDRK4TimeStepper, eq, v, p, g) = stepETDRK4!(s, ts, eq, v, p, g)
 
-# RK4 -------------------------------------------------------------------------
-# RK4 is the classical explicit 4th-order Runge-Kutta time-stepping
-# method. It uses a series of substeps/estimators to achieve 4th-order
-# accuracy over each individual time-step, at the cost of requiring
-# relatively more evaluations of the nonlinear right hand side.
-# It is described, among other places, in Bewley's Numerical
-# Renaissance.
-
-struct RK4TimeStepper{T,dim} <: AbstractTimeStepper
-  dt::Float64
-  sol₁::Array{T,dim}
-  RHS₁::Array{T,dim}
-  RHS₂::Array{T,dim}
-  RHS₃::Array{T,dim}
-  RHS₄::Array{T,dim}
-end
-
-function RK4TimeStepper(dt, LC)
-  @createarrays eltype(LC) size(LC) sol₁ RHS₁ RHS₂ RHS₃ RHS₄
-  RK4TimeStepper{eltype(LC),ndims(LC)}(dt, sol₁, RHS₁, RHS₂, RHS₃, RHS₄)
-end
-
-function stepforward!(s::State, ts::RK4TimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
-  eq.calcN!(ts.RHS₁, s.sol, s.t, s, v, p, g)
-  @. ts.RHS₁ += eq.LC*s.sol
-  # Substep 1
-  t2 = s.t + 0.5*ts.dt
-  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₁
-  eq.calcN!(ts.RHS₂, ts.sol₁, t2, s, v, p, g)
-  @. ts.RHS₂ += eq.LC*ts.sol₁
-  # Substep 2
-  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₂
-  eq.calcN!(ts.RHS₃, ts.sol₁, t2, s, v, p, g)
-  @. ts.RHS₃ += eq.LC*ts.sol₁
-  # Substep 3
-  t3 = s.t + ts.dt
-  @. ts.sol₁ = s.sol + ts.dt*ts.RHS₃
-  eq.calcN!(ts.RHS₄, ts.sol₁, t3, s, v, p, g)
-  @. ts.RHS₄ += eq.LC*ts.sol₁
-
-  # Substep 4 and final step
-  @. s.sol += ts.dt*(   1.0/6.0*ts.RHS₁ + 1.0/3.0*ts.RHS₂
-                      + 1.0/3.0*ts.RHS₃ + 1.0/6.0*ts.RHS₄ )
-  s.t += ts.dt
-  s.step += 1
-
+function stepforward!(s, ts::FilteredETDRK4TimeStepper, eq, v, p, g)
+  stepETDRK4!(s, ts, eq, v, p, g)
+  @. s.sol *= ts.filter
   nothing
 end
 
-
-struct FilteredRK4TimeStepper{T,dim} <: AbstractTimeStepper
-  dt::Float64
-  sol₁::Array{T,dim}
-  RHS₁::Array{T,dim}
-  RHS₂::Array{T,dim}
-  RHS₃::Array{T,dim}
-  RHS₄::Array{T,dim}
-  filter::Array{T,dim}    # Filter for solution
-end
-
-function FilteredRK4TimeStepper(dt, LC, g; filterkwargs...)
-  @createarrays eltype(LC) size(LC) sol₁ RHS₁ RHS₂ RHS₃ RHS₄
-  filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
-  FilteredRK4TimeStepper{eltype(LC),ndims(LC)}(dt, sol₁, RHS₁, RHS₂, RHS₃, 
-    RHS₄, filter)
-end
-
-function stepforward!(s::State, ts::FilteredRK4TimeStepper,
+function stepforward!(s::DualState, ts::DualFilteredETDRK4TimeStepper,
                       eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
                       g::AbstractGrid)
-  eq.calcN!(ts.RHS₁, s.sol, s.t, s, v, p, g)
-  @. ts.RHS₁ += eq.LC*s.sol
-  # Substep 1
-  t2 = s.t + 0.5*ts.dt
-  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₁
-  eq.calcN!(ts.RHS₂, ts.sol₁, t2, s, v, p, g)
-  @. ts.RHS₂ += eq.LC*ts.sol₁
-  # Substep 2
-  @. ts.sol₁ = s.sol + 0.5*ts.dt*ts.RHS₂
-  eq.calcN!(ts.RHS₃, ts.sol₁, t2, s, v, p, g)
-  @. ts.RHS₃ += eq.LC*ts.sol₁
-  # Substep 3
-  t3 = s.t + ts.dt
-  @. ts.sol₁ = s.sol + ts.dt*ts.RHS₃
-  eq.calcN!(ts.RHS₄, ts.sol₁, t3, s, v, p, g)
-  @. ts.RHS₄ += eq.LC*ts.sol₁
-
-  # Substep 4 and final step
-  @. s.sol = ts.filter*(s.sol + ts.dt*(   1.0/6.0*ts.RHS₁ + 1.0/3.0*ts.RHS₂
-                                        + 1.0/3.0*ts.RHS₃ + 1.0/6.0*ts.RHS₄ ))
-  s.t += ts.dt
-  s.step += 1
-
+  stepETDRK4!(s, ts, eq, v, p, g)
+  @. s.solc *= ts.c.filter
+  @. s.solr *= ts.r.filter
   nothing
 end
-
-
 
 # AB3 -------------------------------------------------------------------------
 # 3rd order Adams-Bashforth time stepping is an explicit scheme that uses
 # solutions from two previous time-steps to achieve 3rd order accuracy.
 
-struct AB3TimeStepper <: AbstractTimeStepper
-  dt::Float64
-  RHS::Array{Complex{Float64}, 2}
-  RHS₋₁::Array{Complex{Float64}, 2}
-  RHS₋₂::Array{Complex{Float64}, 2}
+struct AB3TimeStepper{Tdt,Tsol,dim} <: AbstractTimeStepper
+  dt::Tdt
+  RHS::Array{Tsol,dim}
+  RHS₋₁::Array{Tsol,dim}
+  RHS₋₂::Array{Tsol,dim}
 end
 
-function AB3TimeStepper(dt::Float64, sol::Array{Complex{Float64}, 2})
-  RHS   = zeros(sol)
-  RHS₋₁ = zeros(sol)
-  RHS₋₂ = zeros(sol)
+function AB3TimeStepper(dt, LC; soltype=cxeltype(LC))
+  @createarrays soltype size(LC) RHS RHS₋₁ RHS₋₂
   AB3TimeStepper(dt, RHS, RHS₋₁, RHS₋₂)
 end
 
-function stepforward!(s::State, ts::AB3TimeStepper,
-                      eq::AbstractEquation, v::AbstractVars, p::AbstractParams, 
-                      g::AbstractGrid)
+function stepforward!(s, ts::AB3TimeStepper, eq, v, p, g)
   if s.step < 2                 # forward Euler steps to initialize AB3
     eq.calcN!(ts.RHS, s.sol, s.t, s, v, p, g)
     @. ts.RHS += eq.LC.*s.sol   # Add linear term to RHS
