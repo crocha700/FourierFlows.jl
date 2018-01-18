@@ -58,8 +58,9 @@ end
 # Run the tests
 n = 64 
 
-println("Testing timesteppers:")
+@printf "Testing timesteppers:"
 for (stepper, steps) in steppersteps
-  println("   ", stepper)
+  @printf " %s" stepper
   @test testtwodturbstepforward(n; stepper=stepper, nsteps=steps)
 end
+println("")

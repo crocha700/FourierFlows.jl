@@ -222,9 +222,11 @@ function RK4TimeStepper(dt, LCc, LCr, solctype::DataType=cxeltype(LCc),
   DualRK4TimeStepper(dt, c, r)
 end
 
-function FilteredRK4TimeStepper(dt, LCc, LCr, g::AbstractGrid; filterkwargs...)
-  c = FilteredRK4TimeStepper(dt, LCc, g)
-  r = FilteredRK4TimeStepper(dt, LCr, g)
+function FilteredRK4TimeStepper(dt, LCc, LCr, g::AbstractGrid,
+  solctype::DataType=cxeltype(LCc), solrtype::DataType=cxeltype(LCr); 
+  filterkwargs...)
+  c = FilteredRK4TimeStepper(dt, LCc, g, solctype)
+  r = FilteredRK4TimeStepper(dt, LCr, g, solrtype)
   DualFilteredRK4TimeStepper(dt, c, r)
 end
 

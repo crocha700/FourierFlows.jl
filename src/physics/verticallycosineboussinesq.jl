@@ -44,7 +44,6 @@ function Problem(;
   else;              eq = Equation(pr, g)
   end
 
-  st = State(Complex{Float64}, (g.nkr, g.nl, 4), dt)
   ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
 
   FourierFlows.Problem(g, vs, pr, eq, ts)
@@ -393,26 +392,31 @@ set_uvp!(prob, u, v, p) = set_uvp!(prob.vars, prob.state, prob.params,
                                    prob.grid, u, v, p)
 
 """ 
-    set_planewave!(prob, uw, nkw)
+    set_planewave!(prob, u₀, κ, θ=0)
 
-Set a plane wave solution with initial speed uw and non-dimensional wave
-number nkw. The dimensional wavenumber will be 2π*nkw/Lx. 
+Set a plane wave solution with initial speed u₀, non-dimensional wave
+number κ, and angle θ with the horizontal. The dimensional wavenumber vector 
+is (k, l) = (κ cos θ, κ sin θ) and is rounded to the nearest grid wavenumber.
 """
-function set_planewave!(vs, pr, g, uw, nkw)
+function set_planewave!(vs, pr, g, u₀, κ, θ=0)
   x, y = g.X, g.Y
 
+  kw = 2π/g.Lx*round(Int, κ*cos(θ))
+  lw = 2π/g.Lx*round(Int, κ*sin(θ))
+
   # Wave parameters
-  kw = 2π*nkw/g.Lx
-  σ = sqrt(pr.f^2 + pr.N^2*kw^2/pr.m^2)
-  alpha = pr.N^2*kw^2/(pr.f^2*pr.m^2) # also (sig^2-f^2)/f^2
+  σ = sqrt(pr.f^2 + pr.N^2*(kw^2+lw^2)/pr.m^2)
+  alpha = pr.N^2*(kw^2+lw^2)/(pr.f^2*pr.m^2) # also (sig^2-f^2)/f^2
 
-  u0 = uw/2
-  v0 = -uw * im*pr.f/2σ
-  p0 = uw * kw*pr.N^2/(2σ*pr.m^2)
+  uw = u₀
+  vw = u₀ * (p.f*kw - σ*kw)/(σ*kw - p.f*lw)
+  pw = u₀ * (σ^2 - p.f^2)/(σ*kw - p.f*lw)
 
-  u = u0 * exp.(im*kw*x)
-  v = v0 * exp.(im*kw*x)
-  p = p0 * exp.(im*kw*x)
+  Φ = kw*x + lw*y
+
+  u = uw * cos.(Φ)
+  v = vw * sin.(Φ)
+  p = pw * cos.(Φ)
   
   set_uvp!(vs, pr, g, u, v, p)
   nothing
