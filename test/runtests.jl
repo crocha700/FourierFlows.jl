@@ -7,6 +7,8 @@ using Base.Test
 # Run tests
 tic()
 
+println("-- Core --")
+
 @testset "Grids" begin
   include("test_grid.jl")
 end
@@ -26,6 +28,8 @@ end
 @testset "Utils" begin
   include("test_utils.jl")
 end
+
+println("-- Physics modules --")
 
 @testset "Physics: TwoDTurb           " begin
   include("test_twodturb.jl")    

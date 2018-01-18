@@ -7,37 +7,35 @@ using FourierFlows
 
 Construct a VerticallyFourierBoussinesq initial value problem.
 """
-function InitialValueProblem(;
-   nx = 128,
-   Lx = 2π,
-   ny = nothing,
-   Ly = nothing,
+function Problem(;
+    nx = 128,
+    Lx = 2π,
+    ny = nx,
+    Ly = Lx,
    nu0 = 0,
   nnu0 = 1,
    nu1 = 0,
   nnu1 = 1,
-    f = 1,
-    N = 10,
-    m = 40,
-   Ub = 0,
-   Vb = 0,
-   dt = 0.01,
+   mu0 = 0,
+  nmu0 = 0,
+   mu1 = 0,
+  nmu1 = 0,
+     f = 1,
+     N = 10,
+     m = 40,
+    Ub = 0,
+    Vb = 0,
+    dt = 0.01,
   stepper = "RK4"
   )
 
-  #if stepper[1:4] != "Dual"; stepper = "Dual"*stepper; end
-  if Ly == nothing; Ly = Lx; end
-  if ny == nothing; ny = nx; end
-
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = Params(nu0, nnu0, nu1, nnu1, f, N, m)
+  pr = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m, Ub, Vb)
   vs = Vars(g)
   eq = Equation(pr, g)
-  st = DualState(Complex{Float64}, (g.nk, g.nl, 3), 
-                 Complex{Float64}, (g.nkr, g.nl), dt)
   ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LCc, eq.LCr, g)
 
-  FourierFlows.Problem(g, vs, pr, eq, ts, st)
+  FourierFlows.Problem(g, vs, pr, eq, ts)
 end
 
 
@@ -55,20 +53,24 @@ The optional constant background velocity (Ub,Vb) is set to zero by default.
 The viscosity is applied only to the first-mode horizontal velocities.
 """
 struct Params <: TwoModeParams
-  nu0::Float64                 # Mode-0 viscosity
-  nnu0::Int                    # Mode-0 hyperviscous order
-  nu1::Float64                 # Mode-1 viscosity
-  nnu1::Int                    # Mode-1 hyperviscous order
-  f::Float64                  # Planetary vorticity
-  N::Float64                  # Buoyancy frequency
-  m::Float64                  # Mode-one wavenumber
-  Ub::Float64                 # Steady mode-0 mean x-velocity
-  Vb::Float64                 # Steady mode-0 mean y-velocity
+  nu0::Float64     # Mode-0 viscosity
+  nnu0::Int        # Mode-0 hyperviscous order
+  nu1::Float64     # Mode-1 viscosity
+  nnu1::Int        # Mode-1 hyperviscous order
+  mu0::Float64     # Mode-0 drag / hypoviscosity
+  nmu0::Int        # Mode-0 drag / hypoviscous order
+  mu1::Float64     # Mode-1 drag / hypoviscosity    
+  nmu1::Int        # Mode-1 drag / hypoviscous order
+  f::Float64       # Planetary vorticity
+  N::Float64       # Buoyancy frequency
+  m::Float64       # Mode-one wavenumber
+  Ub::Float64      # Steady mode-0 mean x-velocity
+  Vb::Float64      # Steady mode-0 mean y-velocity
 end
 
-Params(nu0, nnu0, nu1, nnu1, f, N, m, Ub=0) = Params(nu0, nnu0, nu1, nnu1, f, N, m, 
-  Ub, 0)
-
+Params(nu0, nnu0, nu1, nnu1, f, N, m, Ub=0, Vb=0) = Params(
+  nu0, nnu0, nu1, nnu1, f, N, m, Ub, Vb)
+  
 # Equations
 function Equation(p::TwoModeParams, g::TwoDGrid)
   LCc, LCr = getlinearcoefficients(p, g)
@@ -76,70 +78,35 @@ function Equation(p::TwoModeParams, g::TwoDGrid)
 end
 
 function getlinearcoefficients(p::TwoModeParams, g::TwoDGrid)
-  LCr = -p.nu0 * g.KKrsq.^p.nnu0
+  LCr = @. -p.nu0*g.KKrsq^p.nnu0 - p.mu0*g.KKrsq^p.nmu0 
+
   LCc = zeros(g.nk, g.nl, 3)
-  LCc[:, :, 1] = -p.nu1 * g.KKsq.^p.nnu1
-  LCc[:, :, 2] = -p.nu1 * g.KKsq.^p.nnu1
+  LCc[:, :, 1] = @. -p.nu1*g.KKsq^p.nnu1 - p.mu1*g.KKsq^p.nmu1 
+  LCc[:, :, 2] = @. -p.nu1*g.KKsq^p.nnu1 - p.mu1*g.KKsq^p.nmu1 
+
+  LCr[1, 1] = 0
+  LCc[1 ,1, 1] = 0
+  LCc[1 ,1, 2] = 0
   LCc, LCr
 end
 
 # Vars
-abstract type TwoModeVars <: AbstractVars end
+abstract type VerticallyFourierVars <: AbstractVars end
 
-struct Vars <: TwoModeVars
-  # Zeroth-mode
-  Z::Array{Float64,2}
-  U::Array{Float64,2}
-  V::Array{Float64,2}
-  UZuzvw::Array{Float64,2}
-  VZvzuw::Array{Float64,2}
-  Ux::Array{Float64,2}
-  Uy::Array{Float64,2}
-  Vx::Array{Float64,2}
-  Vy::Array{Float64,2}
-  Psi::Array{Float64,2}
-  # First-mode
-  u::Array{Complex{Float64},2}
-  v::Array{Complex{Float64},2}
-  w::Array{Complex{Float64},2}
-  p::Array{Complex{Float64},2}
-  zeta::Array{Complex{Float64},2}
-  # Multiplies
-  Uu::Array{Complex{Float64},2}
-  Uv::Array{Complex{Float64},2}
-  Up::Array{Complex{Float64},2}
-  Vu::Array{Complex{Float64},2}
-  Vv::Array{Complex{Float64},2}
-  Vp::Array{Complex{Float64},2}
-  uUxvUy::Array{Complex{Float64},2}
-  uVxvVy::Array{Complex{Float64},2}
-  # Zeroth-mode transforms
-  Zh::Array{Complex{Float64},2}
-  Uh::Array{Complex{Float64},2}
-  Vh::Array{Complex{Float64},2}
-  UZuzvwh::Array{Complex{Float64},2}
-  VZvzuwh::Array{Complex{Float64},2}
-  Uxh::Array{Complex{Float64},2}
-  Uyh::Array{Complex{Float64},2}
-  Vxh::Array{Complex{Float64},2}
-  Vyh::Array{Complex{Float64},2}
-  Psih::Array{Complex{Float64},2}
-  # First-mode transforms
-  uh::Array{Complex{Float64},2}
-  vh::Array{Complex{Float64},2}
-  wh::Array{Complex{Float64},2}
-  ph::Array{Complex{Float64},2}
-  zetah::Array{Complex{Float64},2}
-  # Multiply transforms
-  Uuh::Array{Complex{Float64},2}
-  Uvh::Array{Complex{Float64},2}
-  Uph::Array{Complex{Float64},2}
-  Vuh::Array{Complex{Float64},2}
-  Vvh::Array{Complex{Float64},2}
-  Vph::Array{Complex{Float64},2}
-  uUxvUyh::Array{Complex{Float64},2}
-  uVxvVyh::Array{Complex{Float64},2}
-end
+physifieldsr = [:Z, :U, :V, :UZuzvw, :VZvzuw, :Ux, :Uy, :Vx, :Vy, :Psi]
+physifieldsc = [:u, :v, :w, :p, :zeta, :Uu, :Uv, :Up, :Vu, :Vv, :Vp, 
+  :uUxvUy, :uVxvVy]
+transfieldsr = [ Symbol(var, :h) for var in physifieldsr ]
+transfieldsc = [ Symbol(var, :h) for var in physifieldsc ]
+
+fieldspecs = cat(1, 
+  FourierFlows.getfieldspecs(physifieldsr, Array{Float64,2}),
+  FourierFlows.getfieldspecs(physifieldsc, Array{Complex{Float64},2}),
+  FourierFlows.getfieldspecs(transfieldsr, Array{Complex{Float64},2}),
+  FourierFlows.getfieldspecs(transfieldsc, Array{Complex{Float64},2}))
+
+eval(FourierFlows.getstructexpr(
+  :Vars, fieldspecs; parent=:VerticallyFourierVars))
 
 function Vars(g)
   @createarrays Float64 (g.nx, g.ny) Z U V UZuzvw VZvzuw Ux Uy Vx Vy Psi
@@ -475,7 +442,7 @@ end
 
 Returns the domain-integrated shear production.
 """
-function shearproduction(s, v::TwoModeVars, p::TwoModeParams, g::TwoDGrid)
+function shearproduction(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   v.Zh .= s.solr
   @. v.Psih = -g.invKKrsq*v.Zh
   @. v.Uh  = -im*g.l  * v.Psih
@@ -505,7 +472,7 @@ shearproduction(prob) = shearproduction(prob.state, prob.vars, prob.params,
 """
 Return the domain-integrated conversion from potential to kinetic energy.
 """
-function energyconversion(s, v::TwoModeVars, p::TwoModeParams, g::TwoDGrid)
+function energyconversion(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   @views @. v.wh = -(g.k*s.solc[:, :, 1] + g.l*s.solc[:, :, 2]) / p.m
   @views A_mul_B!(v.p, g.ifftplan, s.solc[:, :, 3])
   A_mul_B!(v.w, g.ifftplan, v.wh)
@@ -550,7 +517,7 @@ function mode1apv(Z, zeta, p, pr::TwoModeParams, g::TwoDGrid)
   zeta .- pr.m.^2.0./pr.N.^2.0 .* (pr.f .+ Z) .* p
 end
 
-function mode1apv(Z, s, v::TwoModeVars, p::TwoModeParams, g::TwoDGrid)
+function mode1apv(Z, s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   @views @. v.ph = s.solc[:, :, 3]
   @views @. v.zetah = im*g.k*s.solc[:, :, 2] - im*g.l*s.solc[:, :, 1]
 

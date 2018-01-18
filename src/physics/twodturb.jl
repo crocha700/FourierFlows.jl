@@ -60,16 +60,14 @@ end
 
 Returns the params for unforced two-dimensional turbulence.
 """
-struct Params{T} <: AbstractParams
-  ν::T    # Vorticity viscosity
-  nν::Int # Vorticity hyperviscous order
-  μ::T    # Bottom drag or hypoviscosity
-  nμ::Int # Order of hypodrag
+struct Params <: AbstractParams
+  ν::Float64  # Vorticity viscosity
+  nν::Int     # Vorticity hyperviscous order
+  μ::Float64  # Bottom drag or hypoviscosity
+  nμ::Int     # Order of hypodrag
 end
 
-Params{T}(ν::T, nν, μ, nμ) = Params(ν, nν, T(μ), nμ)
-Params{T}(ν, nν, μ::T, nμ) = Params(T(ν), nν, μ, nμ)
-Params(ν, nν) = Params{typeof(ν)}(ν, nν, 0, 0)
+Params(ν, nν) = Params(ν, nν, 0, 0)
 
 """
   ForcedParams(ν, nν, μ, nμ, calcF!)

@@ -38,13 +38,16 @@ function autoconstructtimestepper(
   eval(tsexpr)
 end
 
-function autoconstructtimestepper(stepper, dt, LCc, LCr, 
-                                  g::AbstractGrid=ZeroDGrid(1))
+function autoconstructtimestepper(
+  stepper, dt, LCc, LCr, g::AbstractGrid=ZeroDGrid(1), 
+  solctype::DataType=cxeltype(LCc), solrtype::DataType=cxeltype(LCr))
+  
+                                  
   fullsteppername = Symbol(stepper, :TimeStepper)
   if stepper ∈ filteredsteppers
-    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr, g)
+    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr, g, solctype, solrtype)
   else
-    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr)
+    tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr, solctype, solrtype)
   end
   eval(tsexpr)
 end

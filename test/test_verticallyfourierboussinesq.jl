@@ -8,7 +8,7 @@ function lambdipoletest(n, dt; L=2π, Ue=1, Re=L/20, nu0=0, nnu0=1,
 
   nt = round(Int, ti/dt)
 
-  prob = VerticallyFourierBoussinesq.InitialValueProblem(nx=n, Lx=L, 
+  prob = VerticallyFourierBoussinesq.Problem(nx=n, Lx=L, 
     nu0=nu0, nnu0=nnu0, dt=dt, stepper="FilteredRK4")
   x, y, Z = prob.grid.X, prob.grid.Y, prob.vars.Z # nicknames
 
