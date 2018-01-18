@@ -1,5 +1,6 @@
 module VerticallyFourierBoussinesq
 using FourierFlows
+import FourierFlows: getfieldspecs, getstructexpr, parsevalsum, parsevalsum2
 
 # Problem
 """
@@ -74,7 +75,7 @@ Params(nu0, nnu0, nu1, nnu1, f, N, m, Ub=0, Vb=0) = Params(
 # Equations
 function Equation(p::TwoModeParams, g::TwoDGrid)
   LCc, LCr = getlinearcoefficients(p, g)
-  FourierFlows.DualEquation(LCc, LCr, calcN!)
+  DualEquation(LCc, LCr, calcN!)
 end
 
 function getlinearcoefficients(p::TwoModeParams, g::TwoDGrid)
@@ -100,12 +101,12 @@ transfieldsr = [ Symbol(var, :h) for var in physifieldsr ]
 transfieldsc = [ Symbol(var, :h) for var in physifieldsc ]
 
 fieldspecs = cat(1, 
-  FourierFlows.getfieldspecs(physifieldsr, Array{Float64,2}),
-  FourierFlows.getfieldspecs(physifieldsc, Array{Complex{Float64},2}),
-  FourierFlows.getfieldspecs(transfieldsr, Array{Complex{Float64},2}),
-  FourierFlows.getfieldspecs(transfieldsc, Array{Complex{Float64},2}))
+  getfieldspecs(physifieldsr, Array{Float64,2}),
+  getfieldspecs(physifieldsc, Array{Complex{Float64},2}),
+  getfieldspecs(transfieldsr, Array{Complex{Float64},2}),
+  getfieldspecs(transfieldsc, Array{Complex{Float64},2}))
 
-eval(FourierFlows.getstructexpr(
+eval(getstructexpr(
   :Vars, fieldspecs; parent=:VerticallyFourierVars))
 
 function Vars(g)
@@ -365,84 +366,115 @@ function set_isotropicwavefield!(prob::AbstractProblem, amplitude; kwargs...)
     amplitude; kwargs...)
 end
 
-
 """
     mode0energy(prob)
 
-Returns the integrated energy in the zeroth mode.
+Returns the domain-averaged energy in the zeroth mode.
 """
-function mode0energy(s::DualState, g::TwoDGrid)
-  0.5*FourierFlows.parsevalsum(real.(g.invKKrsq).*abs2.(s.solr), g)
+@inline function mode0energy(s, v, g)
+  @. v.Uh = g.invKKrsq * abs2(s.solr) # qh*Psih
+  1/(2*g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
-
-function mode0energy(prob::AbstractProblem)
-  mode0energy(prob.state, prob.grid)
-end
-
-
+@inline mode0energy(prob) = mode0energy(prob.state, prob.vars, prob.grid)
+  
 """
     mode1ke(prob)
 
-Returns the projection of the integrated first mode kinetic energy
-onto the zeroth mode.
+Returns the domain-averaged kinetic energy in the first mode.
 """
-function mode1ke(uh, vh, g)
-  FourierFlows.parsevalsum2(uh, g) + FourierFlows.parsevalsum2(vh, g)
-end
-
-mode1ke(s, g) = @views mode1ke(s.solc[:, :, 1], s.solc[:, :, 2], g)
+@inline mode1ke(uh, vh, g) = (parsevalsum2(uh, g) 
+  + parsevalsum2(vh, g))/(g.Lx*g.Ly)
+@inline mode1ke(s, g) = @views mode1ke(s.solc[:, :, 1], s.solc[:, :, 2], g)
+@inline mode1ke(prob) = mode1ke(prob.state, prob.grid)
 
 """
     mode1pe(prob)
 
-Returns the projection of the integrated first mode potential energy onto the
-zeroth mode.
+Returns the domain-averaged potential energy in the first mode.
 """
-function mode1pe(s, p, g)
-  p.m^2/p.N^2*FourierFlows.parsevalsum2(s.solc[:, :, 3], g)
-end
+@inline mode1pe(s, p, g) = @views p.m^2/(g.Lx*g.Ly*p.N^2)*parsevalsum2(
+  s.solc[:, :, 3], g)
+@inline mode1pe(prob) = mode1pe(prob.state, prob.params, prob.grid)
 
 """
-    mode1energy(s, p, g)
-Returns the projection of the total integrated first mode energy onto the
-zeroth mode.
+    mode1energy(prob)
+
+Returns the domain-averaged total energy in the first mode.
 """
 mode1energy(s, p, g) = mode1ke(s, g) + mode1pe(s, p, g)
-
-    mode1pe(prob) = mode1pe(prob.state, prob.params, prob.grid)
-    mode1ke(prob) = mode1ke(prob.state, prob.grid)
 mode1energy(prob) = mode1energy(prob.state, prob.params, prob.grid)
 
 """
-    totalenergy(s, p, g)
+    mode0dissipation(prob)
+
+Returns the domain-averaged kinetic energy dissipation of the zeroth mode.
+"""
+@inline function mode0dissipation(s, v, p, g)
+  @. v.Uh = g.KKrsq^(p.nnu0-1) * abs2(s.solr)
+  p.nu0/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
+end
+@inline mode0dissipation(prob) = mode0dissipation(prob.state, prob.vars, 
+                                                  prob.params, prob.grid)
+
+"""
+    mode0drag(prob)
+
+Returns the extraction of domain-averaged energy extraction by the drag μ.
+"""
+@inline function mode0drag(s, v, p, g)
+  @. v.Uh = g.KKrsq^(p.nmu0-1) * abs2(s.solr)
+  @. v.Uh[1, 1] = 0
+  p.mu0/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
+end
+@inline mode0drag(prob) = mode0drag(prob.state, prob.vars, prob.params, 
+                                    prob.grid) 
+
+"""
+    mode1dissipation(prob)
+
+Returns the domain-averaged kinetic energy dissipation of the first mode 
+by horizontal viscosity.
+"""
+@inline function mode1dissipation(s, v, p, g)
+  @views @. v.Uuh = g.k^p.nnu1*s.solc[:, :, 1]
+  @views @. v.Vuh = g.l^p.nnu1*s.solc[:, :, 2]
+  2*p.nu1/(g.Lx*g.Ly)*(parsevalsum2(v.Uuh, g) + parsevalsum2(v.Vuh, g))    
+end
+@inline mode1dissipation(prob) = mode1dissipation(prob.state, prob.vars,
+                                                  prob.params, prob.grid)
+
+"""
+    mode1drag(prob)
+
+Returns the domain-averaged kinetic energy dissipation of the first mode 
+by horizontal viscosity.
+"""
+@inline function mode1drag(s, v, p, g)
+  @views @. v.Uuh = g.k^p.nmu1*s.solc[:, :, 1]
+  @views @. v.Vuh = g.l^p.nmu1*s.solc[:, :, 2]
+  if p.nmu1 != 0 # zero out zeroth mode
+    @views @. v.Uuh[1, :] = 0 
+    @views @. v.Vuh[:, 1] = 0
+  end
+  2*p.mu1/(g.Lx*g.Ly)*(parsevalsum2(v.Uuh, g) + parsevalsum2(v.Vuh, g))
+end
+@inline mode1drag(prob) = mode1drag(prob.state, prob.vars, prob.params, 
+                                    prob.grid)
+                                                  
+"""
+    totalenergy(prob)
 
 Returns the total energy projected onto the zeroth mode.
 """
-totalenergy(s, p, g) = mode0energy(s, g) + mode1energy(s, p, g)
-totalenergy(prob) = totalenergy(prob.state, prob.params, prob.grid)
+totalenergy(s, v, p, g) = mode0energy(s, v, g) + mode1energy(s, p, g)
+totalenergy(prob) = totalenergy(prob.state, prob.vars, prob.params, prob.grid)
 
 """
-    mode0dissipation(s, v, p, g)
-
-Returns kinetic energy dissipation of the zeroth mode.
-"""
-function mode0dissipation(s, v, p, g)
-  v.Zh .= s.solr
-  @. v.Psih = -g.invKKrsq*v.Zh
-  @. v.UZuzvwh = -1.0^(p.nnu0/2) * g.KKrsq.^(p.nnu0/2) * s.solr
-  A_mul_B!(v.UZuzvw, g.irfftplan, v.UZuzvwh) 
-  A_mul_B!(v.Psi, g.irfftplan, v.Psih) 
-  @. v.VZvzuw = v.Psi*v.UZuzvw
-
-  -p.nu*g.dx*g.dy*sum(v.VZvzuw)
-end
-
-"""
-    shearproduction(s, v, p, g)
+    shearp(prob)
 
 Returns the domain-integrated shear production.
 """
-function shearproduction(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
+function shearp(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   v.Zh .= s.solr
   @. v.Psih = -g.invKKrsq*v.Zh
   @. v.Uh  = -im*g.l  * v.Psih
@@ -465,14 +497,15 @@ function shearproduction(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDG
 
   g.dx*g.dy*sum(v.UZuzvw)
 end
-
-shearproduction(prob) = shearproduction(prob.state, prob.vars, prob.params, 
-                                        prob.grid)
+shearp(prob) = shearp(prob.state, prob.vars, prob.params, prob.grid)
+                                        
 
 """
+    conversion(prob)
+
 Return the domain-integrated conversion from potential to kinetic energy.
 """
-function energyconversion(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
+function conversion(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   @views @. v.wh = -(g.k*s.solc[:, :, 1] + g.l*s.solc[:, :, 2]) / p.m
   @views A_mul_B!(v.p, g.ifftplan, s.solc[:, :, 3])
   A_mul_B!(v.w, g.ifftplan, v.wh)
@@ -481,20 +514,21 @@ function energyconversion(s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoD
   g.dx*g.dy*sum(v.UZuzvw)
 end
 
-function energyconversion(prob::AbstractProblem)
-  energyconversion(prob.state, prob.vars, prob.params, prob.grid)
+function conversion(prob::AbstractProblem)
+  conversion(prob.state, prob.vars, prob.params, prob.grid)
 end
 
 
 """
+    mode0apv(prob)
+
 Returns the projection of available potential vorticity onto the
 zeroth mode.
 """
 function mode0apv(Z, u, v, p, pr::TwoModeParams, g::TwoDGrid)
-  (Z .+ irfft( pr.m^2.0./pr.N^2.0 .* (
-      im.*g.l.*rfft(real.(u.*conj.(p) .+ conj.(u).*p))
-    - im.*g.kr.*rfft(real.(v.*conj.(p) .+ conj.(v).*p))
-  ), g.nx))
+  Z .+ irfft( im*pr.m^2/pr.N^2 * (
+      g.l .*rfft( @. real(u*conj(p) + conj(u)*p) )
+    - g.kr.*rfft( @. real(v*conj(p) + conj(v)*p) )), g.nx)
 end
 
 function mode0apv(s, v::Vars, p::TwoModeParams, g::TwoDGrid)
@@ -511,13 +545,15 @@ end
 
 
 """
+    mode1apv(prob)
+
 Returns the projection of available potential energy onto the first mode.
 """
-function mode1apv(Z, zeta, p, pr::TwoModeParams, g::TwoDGrid)
-  zeta .- pr.m.^2.0./pr.N.^2.0 .* (pr.f .+ Z) .* p
+function mode1apv(Z, zeta, p, pr, g)
+  @. zeta - pr.m^2/pr.N^2*(pr.f + Z)*p
 end
 
-function mode1apv(Z, s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
+function mode1apv(Z, s::DualState, v, p, g)
   @views @. v.ph = s.solc[:, :, 3]
   @views @. v.zetah = im*g.k*s.solc[:, :, 2] - im*g.l*s.solc[:, :, 1]
 
@@ -527,25 +563,20 @@ function mode1apv(Z, s, v::VerticallyFourierVars, p::TwoModeParams, g::TwoDGrid)
   mode1apv(Z, v.zeta, v.p, p, g)
 end
 
-
-"""
-Return the apv associated with mode-1.
-"""
-
-function mode1apv(s, v::Vars, p::TwoModeParams, g::TwoDGrid)
-  v.Z = irfft(s.solr, g.nx)
+function mode1apv(s::DualState, v, p, g)
+  v.Zh .= s.solr
+  A_mul_B!(v.Z, g.irfftplan, v.Zh)
   mode1apv(v.Z, v, p, g)
 end
-
-mode1apv(prob::AbstractProblem) = mode1apv(prob.state, prob.vars, prob.params, 
-                                           prob.grid)
+mode1apv(prob) = mode1apv(prob.state, prob.vars, prob.params, prob.grid)
+                                           
 
 """
     mode1u(prob)
 
 Return the x-velocity associated with mode-1 at z=0.
 """
-mode1u(v::AbstractVars) = real.(v.u .+ conj.(v.u))
+mode1u(v) = @. real(v.u + conj.(v.u))
 mode1u(prob::AbstractProblem) = mode1u(prob.vars)
 
 """
@@ -553,7 +584,7 @@ mode1u(prob::AbstractProblem) = mode1u(prob.vars)
 
 Return the y-velocity associated with mode-1 at z=0.
 """
-mode1v(v::AbstractVars) = real.(v.v .+ conj.(v.v))
+mode1v(v) = @. real(v.v + conj(v.v))
 mode1v(prob::AbstractProblem) = mode1v(prob.vars)
 
 """
@@ -561,7 +592,7 @@ mode1v(prob::AbstractProblem) = mode1v(prob.vars)
 
 Return the z-velocity associated with mode-1 at z=0.
 """
-mode1w(v::AbstractVars) = real.(v.w .+ conj.(v.w))
+mode1w(v) = @. real(v.w + conj(v.w))
 mode1w(prob::AbstractProblem) = mode1w(prob.vars)
 
 """
@@ -569,22 +600,22 @@ mode1w(prob::AbstractProblem) = mode1w(prob.vars)
 
 Return the pressure associated with mode-1 at z=0.
 """
-mode1p(v::AbstractVars) = real.(v.p .+ conj.(v.p))
+mode1p(v) = @. real(v.p + conj(v.p))
 mode1p(prob::AbstractProblem) = mode1p(prob.vars)
 
 """
     mode1buoyancy(prob)
 Return the buoyancy associated with mode-1 at z=0.
 """
-mode1buoyancy(v, p) = real.(im.*p.m.*v.p .- im.*p.m.*conj.(v.p))
-mode1buoyancy(prob::AbstractProblem) = mode1buoyancy(prob.vars, prob.params)
+mode1buoyancy(v, p) = @. real(im*p.m*v.p - im*p.m*conj(v.p))
+mode1buoyancy(prob) = mode1buoyancy(prob.vars, prob.params)
 
 """
     mode1speed(prob)
 
 Return the speed associated with mode-1 at z=0.
 """
-mode1speed(v::AbstractVars) = sqrt.(mode1u(v).^2.0 .+ mode1v(v).^2.0)
+mode1speed(v) = @. sqrt($mode1u(v)^2 + $mode1v(v)^2)
 mode1speed(prob::AbstractProblem) = mode1speed(prob.vars)
 
 """
@@ -592,7 +623,6 @@ mode1speed(prob::AbstractProblem) = mode1speed(prob.vars)
 
 Return the speed associated with mode-0.
 """
-mode0speed(prob) = sqrt.(prob.vars.U.^2.0 .+ prob.vars.V.^2.0)
+mode0speed(prob) = @. sqrt(prob.vars.U^2 + prob.vars.V^2)
 
-# End module
-end
+end # module

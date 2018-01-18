@@ -1,4 +1,4 @@
-export Equation, Problem, State, DualState
+export Problem, Equation, DualEquation, State, DualState
 
 # Equation Composite Type
 """
@@ -17,7 +17,6 @@ struct DualEquation{Tc,Tr,dimc,dimr} <: AbstractEquation
   LCr::Array{Tr,dimr}
   calcN!::Function
 end
-
 
 # Problem state 
 mutable struct State{Tdt,Tsol,dim} <: AbstractState

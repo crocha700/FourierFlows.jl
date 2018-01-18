@@ -1,6 +1,7 @@
 __precompile__()
 module TwoDTurb
 using FourierFlows
+import FourierFlows: parsevalsum, parsevalsum2
 
 """
     Problem(; parameters...)
@@ -231,9 +232,10 @@ Returns the domain-averaged kinetic energy in the Fourier-transformed vorticity
 solution s.sol.
 """
 @inline function energy(s, v, g)
-  @. v.Uh = g.invKKrsq * abs2(s.sol)
-  1/(2*g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
+  @. v.Uh = g.invKKrsq * abs2(s.sol) # qh*Psih
+  1/(2*g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
+@inline energy(prob) = energy(prob.state, prob.vars, prob.grid)
 
 """
     enstrophy(prob)
@@ -242,8 +244,9 @@ Returns the domain-averaged enstrophy in the Fourier-transformed vorticity
 solution s.sol.
 """
 @inline function enstrophy(s, g)
-  1/(2*g.Lx*g.Ly)*FourierFlows.parsevalsum2(s.sol, g)
+  1/(2*g.Lx*g.Ly)*parsevalsum2(s.sol, g)
 end
+@inline enstrophy(prob) = enstrophy(prob.state, prob.grid)
 
 """
     dissipation(prob)
@@ -253,8 +256,10 @@ Returns the domain-averaged dissipation rate. nν must be >= 1.
 @inline function dissipation(s, v, p, g)
   @. v.Uh = g.KKrsq^(p.nν-1) * abs2(s.sol)
   @. v.Uh[1, 1] = 0
-  p.ν/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
+  p.ν/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
+@inline dissipation(prob) = dissipation(prob.state, prob.vars, prob.params, 
+                                        prob.grid)
 
 """
     work(prob)
@@ -264,27 +269,23 @@ defined by W = -<ψFᵢ> = -Σ ψh conj(F), where <∙> is the domain average,
 Σ denotes a sum over all Fourier modes, ψ is the streamfunction and 
 Fᵢ is the inverse transform of F.
 """
-function work(s, v::ForcedVars, g)
+@inline function work(s, v::ForcedVars, g)
   @. v.Uh = g.invKKrsq * s.sol * conj(v.F)
-  1/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
+  1/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
+@inline work(prob) = work(prob.state, prob.vars, prob.grid)
 
 """
     drag(prob)
 
-Returns the extraction of domain-averaged energy by drag μ.
+Returns the extraction of domain-averaged energy extraction by the drag μ.
 """
-function drag(s, v::ForcedVars, p::ForcedParams, g)
+@inline function drag(s, v, p, g)
   @. v.Uh = g.KKrsq^(p.nμ-1) * abs2(s.sol)
   @. v.Uh[1, 1] = 0
-  p.μ/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
+  p.μ/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
+@inline drag(prob) = drag(prob.state, prob.vars, prob.params, prob.grid) 
 
-@inline      energy(prob) = energy(prob.state, prob.vars, prob.grid)
-@inline   enstrophy(prob) = enstrophy(prob.state, prob.grid)
-@inline        drag(prob) = drag(prob.state, prob.vars, prob.params, prob.grid) 
-@inline        work(prob) = work(prob.state, prob.vars, prob.grid)
-@inline dissipation(prob) = dissipation(prob.state, prob.vars, prob.params, 
-                                        prob.grid)
 
 end # module
