@@ -5,13 +5,13 @@ export resize!, update!, increment!
 abstract type AbstractDiagnostic end
 
 """ A diagnostic type associated with FourierFlows.Problem types """
-mutable struct Diagnostic{T} <: AbstractDiagnostic
+mutable struct Diagnostic{Tdt<:AbstractFloat,T} <: AbstractDiagnostic
   calc::Function
   prob::Problem
   num::Int
-  data::Array{T, 1}
-  time::Array{Float64, 1}
-  step::Array{Int64, 1}
+  data::Array{T,1}
+  time::Array{Tdt,1}
+  step::Array{Int,1}
   value::T
   count::Int
   freq::Int
@@ -25,14 +25,14 @@ function Diagnostic(calc::Function, prob::FourierFlows.Problem; freq=1,
   T = typeof(value)
 
   data = Array{T}(num)
-  time = Array{Float64}(num)
-  step = Array{Int64}(num)
+  time = zeros(typeof(prob.ts.dt), num)
+  step = zeros(Int, num)
 
   data[1] = value
   time[1] = prob.t
   step[1] = prob.step
 
-  Diagnostic{T}(calc, prob, num, data, time, step, value, 1, freq)
+  Diagnostic(calc, prob, num, data, time, step, value, 1, freq)
 end
 
 function getindex(d::Diagnostic, inds...)

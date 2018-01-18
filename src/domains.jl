@@ -12,60 +12,60 @@ end
 """
 Doc.
 """
-struct TwoDGrid <: AbstractGrid
+struct TwoDGrid{T} <: AbstractGrid
   nx::Int
   ny::Int
   nk::Int
   nl::Int
   nkr::Int
 
-  Lx::Float64
-  Ly::Float64
-  dx::Float64
-  dy::Float64
+  Lx::T
+  Ly::T
+  dx::T
+  dy::T
 
-  x::Array{Float64,2}
-  y::Array{Float64,2}
-  X::Array{Float64,2}
-  Y::Array{Float64,2}
+  x::Array{T,2}
+  y::Array{T,2}
+  X::Array{T,2}
+  Y::Array{T,2}
 
-  k::Array{Float64,2}
-  l::Array{Float64,2}
-  kr::Array{Float64,2}
+  k::Array{T,2}
+  l::Array{T,2}
+  kr::Array{T,2}
 
-  K::Array{Float64,2}
-  L::Array{Float64,2}
-  Kr::Array{Float64,2}
-  Lr::Array{Float64,2}
+  K::Array{T,2}
+  L::Array{T,2}
+  Kr::Array{T,2}
+  Lr::Array{T,2}
 
   # k^2 + l^2 and 1/(k^2+l^2) with zero wavenumber omitted
-  KKsq::Array{Float64,2}
-  invKKsq::Array{Float64,2}
-  KKrsq::Array{Float64,2}
-  invKKrsq::Array{Float64,2}
+  KKsq::Array{T,2}
+  invKKsq::Array{T,2}
+  KKrsq::Array{T,2}
+  invKKrsq::Array{T,2}
 
   # FFT plans
-  fftplan::Base.DFT.FFTW.cFFTWPlan{Complex{Float64}, -1, false, 2}
+  fftplan::Base.DFT.FFTW.cFFTWPlan{Complex{T},-1,false,2}
 
-  ifftplan::Base.DFT.ScaledPlan{Complex{Float64},
-    Base.DFT.FFTW.cFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
+  ifftplan::Base.DFT.ScaledPlan{Complex{T},
+    Base.DFT.FFTW.cFFTWPlan{Complex{T},1,false,2},T}
 
-  rfftplan::Base.DFT.FFTW.rFFTWPlan{Float64, -1, false, 2}
+  rfftplan::Base.DFT.FFTW.rFFTWPlan{T,-1,false,2}
 
-  irfftplan::Base.DFT.ScaledPlan{Complex{Float64},
-    Base.DFT.FFTW.rFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
+  irfftplan::Base.DFT.ScaledPlan{Complex{T},
+    Base.DFT.FFTW.rFFTWPlan{Complex{T},1,false,2},T}
 
   # Range objects that access the non-aliased part of the wavenumber range
-  ialias::UnitRange{Int64}
-  iralias::UnitRange{Int64}
-  jalias::UnitRange{Int64}
+  ialias::UnitRange{Int}
+  iralias::UnitRange{Int}
+  jalias::UnitRange{Int}
 end
 
 
 """
 Construct a rectangular grid.
 """
-function TwoDGrid(nx::Int, Lx::Float64, ny::Int=nx, Ly::Float64=Lx;
+function TwoDGrid(T::DataType, nx, Lx, ny=nx, Ly=Lx;
   x0=-0.5*Lx, y0=-0.5*Ly, nthreads=Sys.CPU_CORES, effort=FFTW.MEASURE)
 
   # Size attributes
@@ -110,10 +110,10 @@ function TwoDGrid(nx::Int, Lx::Float64, ny::Int=nx, Ly::Float64=Lx;
 
   # FFT plans
   FFTW.set_num_threads(nthreads)
-  fftplan   = plan_fft(Array{Complex{Float64},2}(nx, ny); flags=effort)
-  ifftplan  = plan_ifft(Array{Complex{Float64},2}(nk, nl); flags=effort)
-  rfftplan  = plan_rfft(Array{Float64,2}(nx, ny); flags=effort)
-  irfftplan = plan_irfft(Array{Complex{Float64},2}(nkr, nl), nx; flags=effort)
+  fftplan   = plan_fft(Array{Complex{T},2}(nx, ny); flags=effort)
+  ifftplan  = plan_ifft(Array{Complex{T},2}(nk, nl); flags=effort)
+  rfftplan  = plan_rfft(Array{T,2}(nx, ny); flags=effort)
+  irfftplan = plan_irfft(Array{Complex{T},2}(nkr, nl), nx; flags=effort)
 
   # Index endpoints for aliased i, j wavenumbers
   iaL, iaR = Int(floor(nk/3))+1, 2*Int(ceil(nk/3))-1
@@ -123,20 +123,15 @@ function TwoDGrid(nx::Int, Lx::Float64, ny::Int=nx, Ly::Float64=Lx;
   iralias = iaL:nkr
   jalias  = iaL:iaR
 
-  TwoDGrid(nx, ny, nk, nl, nkr, Lx, Ly, dx, dy, x, y, X, Y,
+  TwoDGrid{T}(nx, ny, nk, nl, nkr, Lx, Ly, dx, dy, x, y, X, Y,
     k, l, kr, K, L, Kr, Lr, KKsq, invKKsq, KKrsq, invKKrsq,
     fftplan, ifftplan, rfftplan, irfftplan, ialias, iralias, jalias)
 end
 
-# Grid constructor for tupled arguments
-function TwoDGrid(nxy::Tuple{Int, Int}, Lxy::Tuple{Float64, Float64};
-  nthreads=Sys.CPU_CORES)
-  nx, ny = nxy
-  Lx, Ly = Lxy
-  TwoDGrid(nx, Lx, ny, Ly; nthreads=nthreads)
-end
+TwoDGrid(nx, Lx, ny=nx, Ly=Lx; kwargs...) = TwoDGrid(typeof(Lx), nx, Lx, 
+                                                     ny, Ly; kwargs...)
 
-function dealias!(a::Array{Complex{Float64},2}, g)
+function dealias!{T}(a::Array{Complex{T},2}, g)
   if size(a)[1] == g.nkr
     a[g.iralias, g.jalias] = 0
   else
@@ -145,7 +140,7 @@ function dealias!(a::Array{Complex{Float64},2}, g)
   nothing
 end
 
-function dealias!(a::Array{Complex{Float64},3}, g)
+function dealias!{T}(a::Array{Complex{T},3}, g)
   if size(a)[1] == g.nkr
     @views @. a[g.iralias, g.jalias, :] = 0
   else

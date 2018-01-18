@@ -1,5 +1,6 @@
 export Equation, Problem, State, DualState
 
+
 # Problem type and associated functions
 mutable struct Problem <: AbstractProblem
   grid::AbstractGrid
@@ -31,9 +32,7 @@ function getfield(prob::AbstractProblem, name)
 end
 =#
 
-function Problem(g, v, p, eq, ts, st)
-  Problem(g, v, p, eq, ts, st, st.t, st.step)
-end
+Problem(g, v, p, eq, ts, st) = Problem(g, v, p, eq, ts, st, st.t, st.step)
 
 function Problem(g, v, p, eq, ts; soltype=cxeltype(eq.LC))
   st = State(0.0, 0, ts.dt, zeros(soltype, size(eq.LC)))

@@ -4,11 +4,10 @@ import FourierFlows.TwoDTurb: energy, enstrophy, dissipation
 
  n,  L = 256, 2π   # Domain
  ν, nν = 1e-6, 1  # Viscosity
-dt, nt = 1, 200   # Time step
+dt, nt = 1.0, 200   # Time step
 ns = 10
 
-prob = TwoDTurb.InitialValueProblem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt,
-  stepper="FilteredRK4")
+prob = TwoDTurb.Problem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt, stepper="FilteredRK4")
 TwoDTurb.set_q!(prob, rand(n, n))
 
 E = Diagnostic(energy,      prob, nsteps=nt*ns) 
@@ -23,7 +22,7 @@ for i = 1:10
   stepforward!(prob, diags, nt)
   TwoDTurb.updatevars!(prob)  
 
-  cfl = maximum(prob.vars.U)*prob.grid.dx/prob.ts.dt
+  cfl = maximum(prob.vars.U)*prob.ts.dt/prob.grid.dx
   @printf("step: %04d, t: %6.1f, cfl: %.2f, ", prob.step, prob.t, cfl)
   toc(); tic()
 
@@ -36,7 +35,7 @@ end
 Eh = rfft(E)
 kr, Ehr = FourierFlows.radialspectrum(Eh, prob.grid, refinement=1)
 
-fig, axs = subplots(ncols=2, figsize=(10, 4))
+fig, axs = subplots(ncols=2, figsize=(8, 4))
 
 sca(axs[1]); cla()
 pcolormesh(prob.grid.X, prob.grid.Y, prob.vars.q)
