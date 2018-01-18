@@ -1,6 +1,7 @@
 __precompile__()
 module VerticallyCosineBoussinesq
 using FourierFlows
+import FourierFlows: parsevalsum, parsevalsum2
 
 """ 
     InitialValueProblem(; parameters...)
@@ -14,21 +15,23 @@ function Problem(;
   ny = nx,
   Ly = Lx,
   dt = 0.01, 
-  # Viscosity and damping
-    mu = 0,
-   nmu = 0,
-   nu0 = 0,
+  # Drag and/or hyper-/hypo-viscosity
+   nu0 = 0, # barotropic viscosity
   nnu0 = 1, 
-   nu1 = 0,
+   nu1 = 0, # baroclinic viscosity
   nnu1 = 1, 
+   mu0 = 0, # barotropic drag / hypoviscosity
+  nmu0 = 0, 
+   mu1 = 0, # baroclinic drag / hypoviscosity
+  nmu1 = 0,
   # Physical parameters
   f = 1,
-  N = 10,
-  m = 40,
+  N = 1,
+  m = 1,
   # Optional uniform and steady background flow
   Ub = 0,
   Vb = 0,
-  # Timestepper and various
+  # Timestepper and eqn options
   stepper = "RK4",
   linear = false,
   linearized = false,
@@ -421,8 +424,8 @@ function set_planewave!(vs, pr, g, u₀, κ, θ=0)
   set_uvp!(vs, pr, g, u, v, p)
   nothing
 end
-set_planewave!(prob, uw, nkw) = set_planewave!(prob.vars, prob.params, 
-                                               prob.grid, uw, nkw)
+set_planewave!(prob, uw, nkw, θ=0) = set_planewave!(prob.vars, prob.params, 
+                                                    prob.grid, uw, nkw, θ)
 
 # Diagnostics
 """ 
@@ -436,7 +439,7 @@ Returns the domain-averaged energy in the zeroth mode.
 end
 
 """
-    mode0enstrophy(s, g)
+    mode0enstrophy(prob)
 
 Returns the domain-averaged enstrophy in the Fourier-transformed vorticity
 solution s.sol.
@@ -446,40 +449,95 @@ solution s.sol.
 end
 
 """
-    dissipation(s, v, p, g)
+    mode0dissipation(prob)
 
 Returns the domain-averaged barotropic dissipation rate. nnu0 must be >= 1.
 """
 @inline function mode0dissipation(s, v, p, g)
   @views @. v.Uh = g.KKrsq^(p.nnu-1) * abs2(s.sol[:, :, 1])
-  @. v.Uh[1, 1] = 0
   p.nu/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
 """
-    mode0drag(s, v, p, g)
+    mode0drag(prob)
 
 Returns the extraction of domain-averaged barotropic energy by drag μ.
 """
 @inline function mode0drag(s, v, p, g)
-  @. v.Uh = g.KKrsq^(p.nμ-1) * abs2(s.sol)
+  @. v.Uh = g.KKrsq^(p.nmu-1) * abs2(s.sol)
   @. v.Uh[1, 1] = 0
-  p.μ/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
+  p.mu/(g.Lx*g.Ly)*FourierFlows.parsevalsum(v.Uh, g)
 end
 
-@inline mode0energy(prob) = mode0energy(prob.state, prob.vars, prob.grid)
-@inline mode0enstrophy(prob) = mode0enstrophy(prob.state, prob.grid)
-@inline mode0dissipation(prob) = mode0dissipation(prob.state, prob.vars,
-                                                  prob.params, prob.grid)
-@inline mode0drag(prob) = mode0drag(prob.state, prob.vars, prob.params, 
-                                    prob.grid) 
+"""
+    mode1ke(prob)
+
+Returns the domain-averaged kinetic energy in the first mode.
+"""
+@inline function mode1ke(s, g) 
+  @views 1/(4*g.Lx*g.Ly)*(parsevalsum2(s.sol[:, :, 2], g) 
+    + parsevalsum2(s.sol[:, :, 3], g))
+end 
 
 """
-    mode1speed(prob)
+    mode1pe(prob)
 
-Return the speed associated with the baroclinic mode.
+Returns the domain-averaged potential energy in the first mode.
 """
-mode1speed(prob) = sqrt.(prob.vars.u.^2.0 .+ prob.vars.v.^2.0)
+@inline mode1pe(s, p, g) = @views p.m^2/(4*g.Lx*g.Ly*p.N^2)*parsevalsum2(
+  s.solc[:, :, 4], g)
 
-# End module
+"""
+    mode1energy(prob)
+
+Returns the domain-averaged total energy in the first mode.
+"""
+@inline mode1energy(s, p, g) = mode1ke(s, g) + mode1pe(s, p, g)
+
+"""
+    mode1dissipation(prob)
+
+Returns the domain-averaged kinetic energy dissipation of the first mode 
+by horizontal viscosity.
+"""
+@inline function mode1dissipation(s, v, p, g)
+  @views @. v.Uuh = g.kr^p.nnu1*s.sol[:, :, 2]
+  @views @. v.Vuh =  g.l^p.nnu1*s.sol[:, :, 3]
+  p.nu1/(2*g.Lx*g.Ly)*(parsevalsum2(v.Uuh, g) + parsevalsum2(v.Vuh, g))    
 end
+
+"""
+    mode1drag(prob)
+
+Returns the domain-averaged kinetic energy dissipation of the first mode 
+by horizontal viscosity.
+"""
+@inline function mode1drag(s, v, p, g)
+  @views @. v.Uuh = g.kr^p.nmu1*s.sol[:, :, 2]
+  @views @. v.Vuh =  g.l^p.nmu1*s.sol[:, :, 3]
+  if p.nmu1 != 0 # zero out zeroth mode
+    @views @. v.Uuh[1, :] = 0 
+    @views @. v.Vuh[:, 1] = 0
+  end
+  p.mu1/(2*g.Lx*g.Ly)*(parsevalsum2(v.Uuh, g) + parsevalsum2(v.Vuh, g))
+end
+                                                  
+"""
+    totalenergy(prob)
+
+Returns the total energy projected onto the zeroth mode.
+"""
+@inline totalenergy(s, v, p, g) = mode0energy(s, v, g) + mode1energy(s, p, g)
+
+@inline mode0energy(pb) = mode0energy(pb.state, pb.vars, pb.grid)
+@inline mode0enstrophy(pb) = mode0enstrophy(pb.state, pb.grid)
+@inline mode0dissipation(pb) = mode0dissipation(pb.state, pb.vars, pb.params, pb.grid)
+@inline mode0drag(pb) = mode0drag(pb.state, pb.vars, pb.params, pb.grid) 
+@inline mode1ke(pb) = mode1ke(pb.state, pb.grid)
+@inline mode1pe(pb) = mode1pe(pb.state, pb.params, pb.grid)
+@inline mode1energy(pb) = mode1energy(pb.state, pb.params, pb.grid)
+@inline mode1dissipation(pb) = mode1dissipation(pb.state, pb.vars, pb.params, pb.grid)
+@inline mode1drag(pb) = mode1drag(pb.state, pb.vars, pb.params, pb.grid)
+@inline totalenergy(pb) = totalenergy(pb.state, pb.vars, pb.params, pb.grid)
+                                        
+end # module

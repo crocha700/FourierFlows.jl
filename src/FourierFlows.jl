@@ -25,8 +25,8 @@ Returns Complex{eltype(a)} if eltype(a) <: Real; eltype(a) otherwise.
 """
 cxeltype(a) = eltype(a) <: Real ? Complex{eltype(a)} : eltype(a)
 
-# Include base functionality
-include("problemstate.jl")
+# Include core functionality
+include("probtypes.jl")
 include("domains.jl")
 include("diagnostics.jl")
 include("output.jl")
@@ -39,7 +39,6 @@ include("physics/barotropicqg.jl")
 include("physics/verticallyfourierboussinesq.jl")
 include("physics/verticallycosineboussinesq.jl")
 include("physics/traceradvdiff.jl")
-
 #include("physics/tracerpatcheqn.jl")
 
 end # module
