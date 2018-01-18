@@ -27,8 +27,12 @@ function testtwodturbstepforward(n=64, L=2π, ν=0.0, nν=2;
   p  = TwoDTurb.Params(ν, nν)
   v  = TwoDTurb.Vars(g)
   eq = TwoDTurb.Equation(p, g)
-  ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
-  #ts = ForwardEulerTimeStepper(dt, eq.LC; soltype=Complex{Float64})
+  if stepper == "ForwardEuler"
+    sol = zeros(FourierFlows.cxeltype(eq.LC), size(eq.LC))
+    ts = FourierFlows.autoconstructtimestepper(stepper, dt, sol, g)
+  else
+    ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
+  end
   
   # Initial condition (IC)
   qi = rand(g.nx, g.ny)
@@ -54,7 +58,8 @@ end
 # Run the tests
 n = 64 
 
+println("Testing timesteppers:")
 for (stepper, steps) in steppersteps
-  println(stepper)
+  println("   ", stepper)
   @test testtwodturbstepforward(n; stepper=stepper, nsteps=steps)
 end

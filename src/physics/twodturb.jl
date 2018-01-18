@@ -18,11 +18,11 @@ function Problem(;
         nμ = 0,
         dt = 0.01,
    stepper = "RK4",
-     calcF = nothing
+     calcF = nothing,
+         T = typeof(Lx)
   )
 
-  dt = Float64(dt)
-  g  = TwoDGrid(nx, Lx, ny, Ly)
+  g  = TwoDGrid(T, nx, Lx, ny, Ly)
 
   if calcF == nothing
     pr = TwoDTurb.Params(ν, nν, μ, nμ)
@@ -32,10 +32,9 @@ function Problem(;
     vs = TwoDTurb.ForcedVars(g)
   end
   eq = TwoDTurb.Equation(pr, g)
-  st = FourierFlows.State(Complex{Float64}, (g.nkr, g.nl), dt)
-  ts = FourierFlows.autoconstructtimestepper(stepper, dt, st.sol, g)
+  ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g, Complex{T})
 
-  FourierFlows.Problem(g, vs, pr, eq, ts, st)
+  FourierFlows.Problem(g, vs, pr, eq, ts)
 end
 
 """
@@ -57,18 +56,20 @@ function ForcedProblem(; kwargs...)
 end
 
 """
-    Params(ν, nν)
+    Params(ν, nν, μ, nμ)
 
 Returns the params for unforced two-dimensional turbulence.
 """
-struct Params <: AbstractParams
-  ν::Float64        # Vorticity viscosity
-  nν::Int           # Vorticity hyperviscous order
-  μ::Float64        # Bottom drag or hypoviscosity
-  nμ::Float64       # Order of hypodrag
+struct Params{T} <: AbstractParams
+  ν::T    # Vorticity viscosity
+  nν::Int # Vorticity hyperviscous order
+  μ::T    # Bottom drag or hypoviscosity
+  nμ::Int # Order of hypodrag
 end
 
-Params(ν, nν) = Params(ν, nν, 0, 0)
+Params{T}(ν::T, nν, μ, nμ) = Params(ν, nν, T(μ), nμ)
+Params{T}(ν, nν, μ::T, nμ) = Params(T(ν), nν, μ, nμ)
+Params(ν, nν) = Params{typeof(ν)}(ν, nν, 0, 0)
 
 """
   ForcedParams(ν, nν, μ, nμ, calcF!)
@@ -77,15 +78,14 @@ Returns the params for forced two-dimensional turbulence with
 hyperviscosity ν and μ of order nν and nμ and forcing calculated by
 calcF!.
 """
-struct ForcedParams <: AbstractParams
-  ν::Float64        # Vorticity viscosity
+struct ForcedParams{T} <: AbstractParams
+  ν::T              # Vorticity viscosity
   nν::Int           # Vorticity hyperviscous order
-  μ::Float64        # Bottom drag or hypoviscosity
-  nμ::Float64       # Order of hypodrag
+  μ::T              # Bottom drag or hypoviscosity
+  nμ::Int           # Order of hypodrag
   calcF!::Function  # Function that calculates the forcing F
 end
 
-Params(ν, nν, μ, nμ, calcF) = ForcedParams(ν, nν, μ, nμ, calcF)
 
 """
     Equation(p, g)
@@ -95,7 +95,7 @@ Returns the equation for two-dimensional turbulence with params p and grid g.
 function Equation(p, g)
   LC = -p.ν*g.KKrsq.^p.nν - p.μ*g.KKrsq.^p.nμ
   LC[1, 1] = 0
-  FourierFlows.Equation{Complex{Float64},2}(LC, calcN_advection!)
+  FourierFlows.Equation(LC, calcN_advection!)
 end
 
 function Equation(p::ForcedParams, g)

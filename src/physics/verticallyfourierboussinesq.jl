@@ -25,6 +25,7 @@ function InitialValueProblem(;
   stepper = "RK4"
   )
 
+  #if stepper[1:4] != "Dual"; stepper = "Dual"*stepper; end
   if Ly == nothing; Ly = Lx; end
   if ny == nothing; ny = nx; end
 
@@ -71,7 +72,7 @@ Params(nu0, nnu0, nu1, nnu1, f, N, m, Ub=0) = Params(nu0, nnu0, nu1, nnu1, f, N,
 # Equations
 function Equation(p::TwoModeParams, g::TwoDGrid)
   LCc, LCr = getlinearcoefficients(p, g)
-  FourierFlows.DualEquation{3,2}(LCc, LCr, calcN!)
+  FourierFlows.DualEquation(LCc, LCr, calcN!)
 end
 
 function getlinearcoefficients(p::TwoModeParams, g::TwoDGrid)

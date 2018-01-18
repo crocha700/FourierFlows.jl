@@ -27,13 +27,13 @@ Returns a time-stepper type defined by the prefix 'stepper', timestep dt
 solution sol (used to construct variables with identical type and size as
 the solution vector), and grid g.
 """
-function autoconstructtimestepper(stepper, dt, LC, 
-                                  g::AbstractGrid=ZeroDGrid(1))
+function autoconstructtimestepper(
+  stepper, dt, LC, g::AbstractGrid=ZeroDGrid(1), soltype=cxeltype(LC))
   fullsteppername = Symbol(stepper, :TimeStepper)
   if stepper ∈ filteredsteppers
-    tsexpr = Expr(:call, fullsteppername, dt, LC, g)
+    tsexpr = Expr(:call, fullsteppername, dt, LC, g, soltype)
   else
-    tsexpr = Expr(:call, fullsteppername, dt, LC)
+    tsexpr = Expr(:call, fullsteppername, dt, LC, soltype)
   end
   eval(tsexpr)
 end
@@ -139,7 +139,7 @@ function peaked_isotropic_spectrum(nkl::Tuple{Int, Int}, kpeak::Real;
   nk, nl = nkl
   k, l   = fftwavenums(nk), fftwavenums(nl)
 
-  K = zeros(Float64, nk, nl)
+  K = zeros(nk, nl)
   for j = 1:nl, i = 1:nk
     K[i, j] = sqrt(k[i]^2.0 + l[j]^2.0)
   end
