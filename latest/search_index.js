@@ -109,15 +109,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "Base.resize!",
     "category": "Method",
-    "text": "Resize the diagnostic data and time arrays. \n\n\n\n"
-},
-
-{
-    "location": "man/docstrings.html#FourierFlows.groupsize-Tuple{JLD2.Group}",
-    "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.groupsize",
-    "category": "Method",
-    "text": "Find the number of elements in a JLD2 group. \n\n\n\n"
+    "text": "resize!(diag, newnum)\n\nResize the Diagnostic data and time arrays to length newnum. \n\n\n\n"
 },
 
 {
@@ -125,7 +117,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.increment!",
     "category": "Method",
-    "text": "Increment an array of diagnostics. \n\n\n\n"
+    "text": "increment!(diags)\n\nIncrement the array of Diagnostics diags. \n\n\n\n"
 },
 
 {
@@ -133,7 +125,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.increment!",
     "category": "Method",
-    "text": "Increment a diagnostic by calculating a new value. \n\n\n\n"
+    "text": "increment!(diag)\n\nIncrement the Diagnostic diag.\n\n\n\n"
 },
 
 {
@@ -141,7 +133,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.savediagnostic",
     "category": "Method",
-    "text": "Save diagnostics to file.\n\n\n\n"
+    "text": "savediagnostic(diag, diagname)\n\nSave diagnostics to file, labeled by the string diagname.\n\n\n\n"
 },
 
 {
@@ -149,7 +141,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.saveoutput",
     "category": "Method",
-    "text": "Save the current output fields. \n\n\n\n"
+    "text": "saveoutput(out)\n\nSave current output fields for file in out.filename.\n\n\n\n"
 },
 
 {
@@ -157,15 +149,31 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.saveproblem",
     "category": "Method",
-    "text": "Save certain aspects of a Problem. Entire problems cannot be saved in general, because functions cannot be saved (and functions may use arbitrary numbers of global variables that cannot be included in a saved  object). \n\n\n\n"
+    "text": "saveproblem(prob, filename)\n\nSave certain aspects of a problem timestepper, grid, and params. Functions that are fields in params are not saved.\n\n\n\n"
 },
 
 {
-    "location": "man/docstrings.html#FourierFlows.saveproblem-Tuple{FourierFlows.Output}",
+    "location": "man/docstrings.html#FourierFlows.stepforward!-Tuple{FourierFlows.Problem,AbstractArray,Any}",
     "page": "Functions exported from FourierFlows:",
-    "title": "FourierFlows.saveproblem",
+    "title": "FourierFlows.stepforward!",
     "category": "Method",
-    "text": "Save attributes of the Problem associated with the given Output. \n\n\n\n"
+    "text": "stepforward!(prob, diags, nsteps)\n\nStep forward the problem prob for nsteps while calculating the  diagnostics in diags.\n\n\n\n"
+},
+
+{
+    "location": "man/docstrings.html#FourierFlows.stepforward!-Tuple{FourierFlows.Problem,Any}",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.stepforward!",
+    "category": "Method",
+    "text": "stepforward!(prob, nsteps)\n\nStep forward the problem 'prob' for 'nsteps'.\n\n\n\n"
+},
+
+{
+    "location": "man/docstrings.html#FourierFlows.stepforward!-Tuple{FourierFlows.Problem}",
+    "page": "Functions exported from FourierFlows:",
+    "title": "FourierFlows.stepforward!",
+    "category": "Method",
+    "text": "stepforward!(prob)\n\nStep forward the Problem prob for one timestep.\n\n\n\n"
 },
 
 {
@@ -173,7 +181,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Functions exported from FourierFlows:",
     "title": "FourierFlows.update!",
     "category": "Method",
-    "text": "Update the current value of the diagnostic. \n\n\n\n"
+    "text": "update!(diag)\n\nUpdate diag with its current value.\n\n\n\n"
 },
 
 {
