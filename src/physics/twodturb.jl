@@ -1,7 +1,12 @@
 __precompile__()
 module TwoDTurb
+
 using FourierFlows
-import FourierFlows: parsevalsum, parsevalsum2
+
+import FourierFlows: Problem, parsevalsum, parsevalsum2
+
+export Problem, updatevars!, set_q!, 
+       energy, enstrophy, dissipation, work, drag
 
 """
     Problem(; parameters...)
@@ -29,7 +34,7 @@ function Problem(;
     pr = TwoDTurb.Params(ν, nν, μ, nμ)
     vs = TwoDTurb.Vars(g)
   else
-    pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
+    pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, calcF)
     vs = TwoDTurb.ForcedVars(g)
   end
   eq = TwoDTurb.Equation(pr, g)
@@ -61,10 +66,10 @@ end
 
 Returns the params for unforced two-dimensional turbulence.
 """
-struct Params <: AbstractParams
-  ν::Float64  # Vorticity viscosity
+struct Params{T} <: AbstractParams
+  ν::T        # Vorticity viscosity
   nν::Int     # Vorticity hyperviscous order
-  μ::Float64  # Bottom drag or hypoviscosity
+  μ::T        # Bottom drag or hypoviscosity
   nμ::Int     # Order of hypodrag
 end
 
@@ -98,14 +103,15 @@ function Equation(p, g)
 end
 
 function Equation(p::ForcedParams, g)
-  eq = Equation(p, g) 
-  FourierFlows.Equation{Complex{Float64},2}(eq.LC, calcN_forced!)
+  LC = -p.ν*g.KKrsq.^p.nν - p.μ*g.KKrsq.^p.nμ
+  LC[1, 1] = 0
+  FourierFlows.Equation{Complex{Float64},2}(LC, calcN_forced!)
 end
 
 # Properties of Vars types:
 physifields = [:q, :U, :V, :psi]
 transfields = [ Symbol(fld, :h) for fld in physifields ]
-forcefields = [:F, :F₋₁, :sol₋₁]
+forcefields = [:F]
 
 fieldspecs = cat(1,
   FourierFlows.getfieldspecs(physifields, Array{Float64,2}),
@@ -139,8 +145,8 @@ Returns the vars for unforced two-dimensional turbulence with grid g.
 """
 function ForcedVars(g)
   @createarrays Float64 (g.nx, g.ny) q U V psi
-  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih F F₋₁ sol₋₁
-  ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F, F₋₁, sol₋₁)
+  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih F
+  ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F)
 end
 
 # Solvers
