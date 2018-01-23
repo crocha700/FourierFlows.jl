@@ -2,17 +2,16 @@ __precompile__()
 module VerticallyCosineBoussinesq
 using FourierFlows
 
-import FourierFlows: Problem, autoconstructtimestepper, parsevalsum, 
-                     parsevalsum2
+import FourierFlows: autoconstructtimestepper, parsevalsum, parsevalsum2
 
-export set_planewave!, set_Z!, Problem, updatevars!, totalenergy, mode0energy, 
-       mode1energy, mode0dissipation, mode1dissipation, mode0drag, mode1drag
-      
+export updatevars!, set_Z!, set_uvp!, set_planewave!, 
+       totalenergy, mode0energy, mode0enstrophy, mode1ke, mode1pe, mode1energy,
+       mode0dissipation, mode1dissipation, mode0drag, mode1drag
 
 """ 
-    InitialValueProblem(; parameters...)
+    Problem(; parameters...)
 
-Construct a VerticallyCosineBoussinesq initial value problem.
+Construct a VerticallyCosineBoussinesq problem.
 """
 function Problem(;
   # Numerical parameters
@@ -44,13 +43,22 @@ function Problem(;
   calcF = nothing,
   )
 
-  g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; Ub=Ub, Vb=Vb)
-  vs = Vars(g)
+  g = TwoDGrid(nx, Lx, ny, Ly)
 
-  if linear;         eq = LinearEquation(pr, g)
-  elseif linearized; eq = LinearizedEquation(pr, g)
-  else;              eq = Equation(pr, g)
+  if calcF != nothing
+    pr = ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m,
+      calcF; Ub=Ub, Vb=Vb)
+    vs = ForcedVars(g)
+  else
+    pr = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; 
+      Ub=Ub, Vb=Vb)
+    vs = Vars(g)
+  end
+
+  if calcF != nothing; eq = ForcedEquation(pr, g)
+  elseif linear;       eq = LinearEquation(pr, g)
+  elseif linearized;   eq = LinearizedEquation(pr, g)
+  else;                eq = Equation(pr, g)
   end
 
   ts = autoconstructtimestepper(stepper, dt, eq.LC, g)
@@ -62,8 +70,8 @@ end
 abstract type VerticallyCosineParams <: AbstractParams end
 
 """
-    Params(mu, nmu, nu0, nnu0, nu1, nnu1, f, N, m)
-    Params(mu, nmu, nu0, nnu0, nu1, nnu1, f, N, m; Ub=0, Vb=0) 
+    Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; 
+           Ub=0, Vb=0) 
 
 Construct parameters for the Two-Fourier-mode Boussinesq problem. Suffix 0
 refers to zeroth mode; 1 to first mode. f, N, m are Coriolis frequency, 
@@ -76,10 +84,10 @@ struct Params <: VerticallyCosineParams
   nnu0::Int       # Mode-0 hyperviscous order
   nu1::Float64    # Mode-1 viscosity
   nnu1::Int       # Mode-1 hyperviscous order
-  mu0::Float64    # Hypoviscosity/bottom drag 
-  nmu0::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
-  mu1::Float64    # Hypoviscosity/bottom drag 
-  nmu1::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu0::Float64     # Hypoviscosity/bottom drag 
+  nmu0::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu1::Float64     # Hypoviscosity/bottom drag 
+  nmu1::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
   f::Float64      # Planetary vorticity
   N::Float64      # Buoyancy frequency
   m::Float64      # Mode-one wavenumber
@@ -90,18 +98,15 @@ end
 Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; Ub=0, 
   Vb=0) = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m, Ub, Vb)
 
-Params(nu0, nnu0, nu1, nnu1, mu, f, N, m; Ub=0, Vb=0) = Params(nu0, 
-  nnu0, nu1, nnu1, mu, 0, f, N, m, Ub, Vb)
-
 struct ForcedParams <: VerticallyCosineParams
   nu0::Float64    # Mode-0 viscosity
   nnu0::Int       # Mode-0 hyperviscous order
   nu1::Float64    # Mode-1 viscosity
   nnu1::Int       # Mode-1 hyperviscous order
-  mu0::Float64    # Hypoviscosity/bottom drag 
-  nmu0::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
-  mu1::Float64    # Hypoviscosity/bottom drag 
-  nmu1::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu0::Float64     # Hypoviscosity/bottom drag 
+  nmu0::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu1::Float64     # Hypoviscosity/bottom drag 
+  nmu1::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
   f::Float64      # Planetary vorticity
   N::Float64      # Buoyancy frequency
   m::Float64      # Mode-one wavenumber
@@ -110,10 +115,10 @@ struct ForcedParams <: VerticallyCosineParams
   calcF!::Function
 end
 
-ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m, calcF;
-             Ub=0, Vb=0) = ForcedParams(nnu0, nu0, nu1, nnu1, mu, nmu, f, N, m, 
-                                        Ub, Vb, calcF)
-  
+ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m,
+   calcF::Function; Ub=0, Vb=0) = ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, 
+    mu1, nmu1, f, N, m, calcF, Ub, Vb)
+
 # Equations
 function Equation(p::VerticallyCosineParams, g::TwoDGrid)
   LC = zeros(Complex{Float64}, g.nkr, g.nl, 4)
@@ -306,11 +311,11 @@ function calcN!(
   @views @. N[:, :, 1] = - im*g.kr*v.UZuzh - im*g.l*v.VZvzh
   # First-mode nonlinear terms:
   # u
-  @views @. N[:, :, 2] = - im*g.kr*v.Uuh - im*g.l*v.Vuh - v.uUxvUyh
+  @views @. N[:, :, 2] += -im*g.kr*v.Uuh - im*g.l*v.Vuh - v.uUxvUyh
   # v
-  @views @. N[:, :, 3] = - im*g.kr*v.Uvh - im*g.l*v.Vvh - v.uVxvVyh
+  @views @. N[:, :, 3] += -im*g.kr*v.Uvh - im*g.l*v.Vvh - v.uVxvVyh
   # p
-  @views @. N[:, :, 4] = - im*g.kr*v.Uph - im*g.l*v.Vph
+  @views @. N[:, :, 4] += -im*g.kr*v.Uph - im*g.l*v.Vph
 
   nothing
 end
@@ -345,10 +350,10 @@ Update variables to correspond to the solution in s.sol or prob.state.sol.
 """
 
 function updatevars!(v, s, p, g)
-  @views v.Zh .= s.sol[:, :, 1]
-  @views v.uh .= s.sol[:, :, 2]
-  @views v.vh .= s.sol[:, :, 3]
-  @views v.ph .= s.sol[:, :, 4]
+  @views @. v.Zh = s.sol[:, :, 1]
+  @views @. v.uh = s.sol[:, :, 2]
+  @views @. v.vh = s.sol[:, :, 3]
+  @views @. v.ph = s.sol[:, :, 4]
 
   @. v.Psih = -g.invKKrsq*v.Zh
   @. v.Uh   = -im*g.l*v.Psih
@@ -382,7 +387,7 @@ updatevars!(prob) = updatevars!(prob.vars, prob.state, prob.params, prob.grid)
 
 Set zeroth mode vorticity and update vars. 
 """
-function set_Z!(s::State, v::Vars, p::VerticallyCosineParams, g::TwoDGrid, Z)
+function set_Z!(s, v, p, g, Z)
   @views A_mul_B!(s.sol[:, :, 1], g.rfftplan, Z)
   updatevars!(v, s, p, g)
   nothing
@@ -401,41 +406,45 @@ function set_uvp!(s, vs, pr, g, u, v, p)
   updatevars!(vs, s, pr, g)
   nothing
 end
-set_uvp!(prob, u, v, p) = set_uvp!(prob.vars, prob.state, prob.params, 
+set_uvp!(prob, u, v, p) = set_uvp!(prob.state, prob.vars, prob.params, 
                                    prob.grid, u, v, p)
 
 """ 
     set_planewave!(prob, u₀, κ, θ=0)
 
 Set a plane wave solution with initial speed u₀, non-dimensional wave
-number κ, and angle θ with the horizontal. The dimensional wavenumber vector 
-is (k, l) = (κ cos θ, κ sin θ) and is rounded to the nearest grid wavenumber.
+number κ, and angle θ with the horizontal. The non-dimensional wavenumber 
+vector is (k, l) = (κ cos θ, κ sin θ), is normalized by 2π/Lx, and is rounded
+to the nearest integer.
 """
-function set_planewave!(s, vs, pr, g, u₀, κ, θ=0)
+function set_planewave!(s, vs, pr, g, u₀, κ, θ=0; envelope=nothing)
+  k = 2π/g.Lx*round(Int, κ*cos(θ))
+  l = 2π/g.Lx*round(Int, κ*sin(θ))
   x, y = g.X, g.Y
 
-  kw = 2π/g.Lx*round(Int, κ*cos(θ))
-  lw = 2π/g.Lx*round(Int, κ*sin(θ))
-
   # Wave parameters
-  σ = sqrt(pr.f^2 + pr.N^2*(kw^2+lw^2)/pr.m^2)
-  alpha = pr.N^2*(kw^2+lw^2)/(pr.f^2*pr.m^2) # also (sig^2-f^2)/f^2
+  f, N, m = pr.f, pr.N, pr.m
+  σ = sqrt( f^2 + N^2*(k^2 + l^2)/m^2 )
 
-  uw = u₀
-  vw = u₀ * (pr.f*kw - σ*kw)/(σ*kw - pr.f*lw)
-  pw = u₀ * (σ^2 - pr.f^2)/(σ*kw - pr.f*lw)
+  v₀ = u₀ * (f*k - σ*l)/(σ*k - f*l)
+  p₀ = u₀ * (σ^2 - f^2)/(σ*k - f*l)
 
-  Φ = kw*x + lw*y
+  Φ = k*x + l*y
+  u = u₀ * cos.(Φ)
+  v = v₀ * sin.(Φ)
+  p = p₀ * cos.(Φ)
 
-  u = uw * cos.(Φ)
-  v = vw * sin.(Φ)
-  p = pw * cos.(Φ)
+  if envelope != nothing
+    @. u *= envelope(x, y)
+    @. v *= envelope(x, y)
+    @. p *= envelope(x, y)
+  end
   
   set_uvp!(s, vs, pr, g, u, v, p)
   nothing
 end
-set_planewave!(prob, uw, nkw, θ=0) = set_planewave!(
-  prob.state, prob.vars, prob.params, prob.grid, uw, nkw, θ)
+set_planewave!(prob, uw, nkw, θ=0; kwargs...) = set_planewave!(
+  prob.state, prob.vars, prob.params, prob.grid, uw, nkw, θ; kwargs...)
 
 # Diagnostics
 """ 
@@ -539,15 +548,15 @@ Returns the total energy projected onto the zeroth mode.
 """
 @inline totalenergy(s, v, p, g) = mode0energy(s, v, g) + mode1energy(s, p, g)
 
-@inline mode0energy(pb) = mode0energy(pb.state, pb.vars, pb.grid)
-@inline mode0enstrophy(pb) = mode0enstrophy(pb.state, pb.grid)
-@inline mode0dissipation(pb) = mode0dissipation(pb.state, pb.vars, pb.params, pb.grid)
-@inline mode0drag(pb) = mode0drag(pb.state, pb.vars, pb.params, pb.grid) 
-@inline mode1ke(pb) = mode1ke(pb.state, pb.grid)
-@inline mode1pe(pb) = mode1pe(pb.state, pb.params, pb.grid)
-@inline mode1energy(pb) = mode1energy(pb.state, pb.params, pb.grid)
-@inline mode1dissipation(pb) = mode1dissipation(pb.state, pb.vars, pb.params, pb.grid)
-@inline mode1drag(pb) = mode1drag(pb.state, pb.vars, pb.params, pb.grid)
-@inline totalenergy(pb) = totalenergy(pb.state, pb.vars, pb.params, pb.grid)
+mode0energy(pb) = mode0energy(pb.state, pb.vars, pb.grid)
+mode0enstrophy(pb) = mode0enstrophy(pb.state, pb.grid)
+mode0dissipation(pb) = mode0dissipation(pb.state, pb.vars, pb.params, pb.grid)
+mode0drag(pb) = mode0drag(pb.state, pb.vars, pb.params, pb.grid) 
+mode1ke(pb) = mode1ke(pb.state, pb.grid)
+mode1pe(pb) = mode1pe(pb.state, pb.params, pb.grid)
+mode1energy(pb) = mode1energy(pb.state, pb.params, pb.grid)
+mode1dissipation(pb) = mode1dissipation(pb.state, pb.vars, pb.params, pb.grid)
+mode1drag(pb) = mode1drag(pb.state, pb.vars, pb.params, pb.grid)
+totalenergy(pb) = totalenergy(pb.state, pb.vars, pb.params, pb.grid)
                                         
 end # module

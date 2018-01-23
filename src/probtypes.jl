@@ -1,4 +1,4 @@
-export Problem, Equation, DualEquation, State, DualState
+export Equation, DualEquation, State, DualState
 
 # Equation Composite Type
 """
