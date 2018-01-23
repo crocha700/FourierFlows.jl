@@ -1,7 +1,9 @@
 __precompile__()
 module VerticallyCosineBoussinesq
 using FourierFlows
-import FourierFlows: parsevalsum, parsevalsum2
+import FourierFlows: autoconstructtimestepper, parsevalsum, parsevalsum2
+export Problem, updatevars!, totalenergy, mode0energy, mode1energy, 
+       mode0dissipation, mode1dissipation, mode0drag, mode1drag
 
 """ 
     InitialValueProblem(; parameters...)
@@ -47,7 +49,7 @@ function Problem(;
   else;              eq = Equation(pr, g)
   end
 
-  ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
+  ts = autoconstructtimestepper(stepper, dt, eq.LC, g)
 
   FourierFlows.Problem(g, vs, pr, eq, ts)
 end
