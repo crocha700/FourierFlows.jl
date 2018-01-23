@@ -53,11 +53,16 @@ Save current output fields for file in out.filename.
 """
 function saveoutput(out::Output)
   groupname = "timeseries"
-  jldopen(out.filename, "a+") do file
-    file["$groupname/t/$(out.prob.step)"] = out.prob.t
-    for fieldname in keys(out.fields)
-      file["$groupname/$fieldname/$(out.prob.step)"] = out[fieldname]
+  try
+    jldopen(out.filename, "a+") do file
+      file["$groupname/t/$(out.prob.step)"] = out.prob.t
+      for fieldname in keys(out.fields)
+        file["$groupname/$fieldname/$(out.prob.step)"] = out[fieldname]
+      end
     end
+  finally
+    @printf("***Output error***: output not saved. Step: %d, t: %.2e\n",
+      out.prob.step, out.prob.t)
   end
   nothing
 end
