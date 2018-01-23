@@ -1,9 +1,13 @@
 __precompile__()
 module VerticallyCosineBoussinesq
 using FourierFlows
-import FourierFlows: autoconstructtimestepper, parsevalsum, parsevalsum2
-export Problem, updatevars!, totalenergy, mode0energy, mode1energy, 
-       mode0dissipation, mode1dissipation, mode0drag, mode1drag
+
+import FourierFlows: Problem, autoconstructtimestepper, parsevalsum, 
+                     parsevalsum2
+
+export set_planewave!, set_Z!, Problem, updatevars!, totalenergy, mode0energy, 
+       mode1energy, mode0dissipation, mode1dissipation, mode0drag, mode1drag
+      
 
 """ 
     InitialValueProblem(; parameters...)
@@ -41,7 +45,7 @@ function Problem(;
   )
 
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = Params(nu0, nnu0, nu1, nnu1, mu, nmu, f, N, m; Ub=Ub, Vb=Vb)
+  pr = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; Ub=Ub, Vb=Vb)
   vs = Vars(g)
 
   if linear;         eq = LinearEquation(pr, g)
@@ -72,8 +76,10 @@ struct Params <: VerticallyCosineParams
   nnu0::Int       # Mode-0 hyperviscous order
   nu1::Float64    # Mode-1 viscosity
   nnu1::Int       # Mode-1 hyperviscous order
-  mu::Float64     # Hypoviscosity/bottom drag 
-  nmu::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu0::Float64    # Hypoviscosity/bottom drag 
+  nmu0::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu1::Float64    # Hypoviscosity/bottom drag 
+  nmu1::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
   f::Float64      # Planetary vorticity
   N::Float64      # Buoyancy frequency
   m::Float64      # Mode-one wavenumber
@@ -81,8 +87,8 @@ struct Params <: VerticallyCosineParams
   Vb::Float64     # Steady background barotropic y-velocity
 end
 
-Params(nu0, nnu0, nu1, nnu1, mu, nmu, f, N, m; Ub=0, Vb=0) = Params(nu0, 
-  nnu0, nu1, nnu1, mu, nmu, f, N, m, Ub, Vb)
+Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m; Ub=0, 
+  Vb=0) = Params(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m, Ub, Vb)
 
 Params(nu0, nnu0, nu1, nnu1, mu, f, N, m; Ub=0, Vb=0) = Params(nu0, 
   nnu0, nu1, nnu1, mu, 0, f, N, m, Ub, Vb)
@@ -92,8 +98,10 @@ struct ForcedParams <: VerticallyCosineParams
   nnu0::Int       # Mode-0 hyperviscous order
   nu1::Float64    # Mode-1 viscosity
   nnu1::Int       # Mode-1 hyperviscous order
-  mu::Float64     # Hypoviscosity/bottom drag 
-  nmu::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu0::Float64    # Hypoviscosity/bottom drag 
+  nmu0::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu1::Float64    # Hypoviscosity/bottom drag 
+  nmu1::Float64   # Order of hypoviscosity (nmu=0 for bottom drag)
   f::Float64      # Planetary vorticity
   N::Float64      # Buoyancy frequency
   m::Float64      # Mode-one wavenumber
@@ -102,16 +110,16 @@ struct ForcedParams <: VerticallyCosineParams
   calcF!::Function
 end
 
-ForcedParams(nu0, nnu0, nu1, nnu1, mu, nmu, f, N, m, calcF;
+ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m, calcF;
              Ub=0, Vb=0) = ForcedParams(nnu0, nu0, nu1, nnu1, mu, nmu, f, N, m, 
                                         Ub, Vb, calcF)
   
 # Equations
 function Equation(p::VerticallyCosineParams, g::TwoDGrid)
   LC = zeros(Complex{Float64}, g.nkr, g.nl, 4)
-  @views @. LC[:, :, 1] = -p.nu0*g.KKrsq^p.nnu0 - p.mu*g.KKrsq^p.nmu
-  @views @. LC[:, :, 2] = -p.nu1*g.KKrsq^p.nnu1
-  @views @. LC[:, :, 3] = -p.nu1*g.KKrsq^p.nnu1
+  @views @. LC[:, :, 1] = -p.nu0*g.KKrsq^p.nnu0 - p.mu0*g.KKrsq^p.nmu0
+  @views @. LC[:, :, 2] = -p.nu1*g.KKrsq^p.nnu1 - p.mu1*g.KKrsq^p.nmu1
+  @views @. LC[:, :, 3] = -p.nu1*g.KKrsq^p.nnu1 - p.mu1*g.KKrsq^p.nmu1
   FourierFlows.Equation(LC, calcN!)
 end
 
@@ -137,7 +145,7 @@ abstract type VerticallyCosineVars <: AbstractVars end
 physifields = [:Z, :U, :V, :UZuz, :VZvz, :Ux, :Uy, :Vx, :Vy, :Psi, 
   :u, :v, :w, :p, :zeta, :Uu, :Uv, :Up, :Vu, :Vv, :Vp, :uUxvUy, :uVxvVy]
 transfields = [ Symbol(var, :h) for var in physifields ]
-forcefields = [:F, :F₋₁, :sol₋₁]
+forcefields = [:F]
 
 fieldspecs = cat(1,
   FourierFlows.getfieldspecs(physifields, Array{Float64,2}),
@@ -188,14 +196,14 @@ function ForcedVars(g)
   @createarrays Complex{Float64} (g.nkr, g.nl) Vxh Vyh Psih uh vh wh ph zetah
   @createarrays Complex{Float64} (g.nkr, g.nl) Uuh Uvh Uph Vuh Vvh Vph
   @createarrays Complex{Float64} (g.nkr, g.nl) uUxvUyh uVxvVyh
-  @createarrays Complex{Float64} (g.nkr, g.nl, 4) F F₋₁ sol₋₁
+  @createarrays Complex{Float64} (g.nkr, g.nl, 4) F
 
   ForcedVars(
     Z, U, V, UZuz, VZvz, Ux, Uy, Vx, Vy, Psi, 
     u, v, w, p, zeta, Uu, Uv, Up, Vu, Vv, Vp, uUxvUy, uVxvVy,
     Zh, Uh, Vh, UZuzh, VZvzh, Uxh, Uyh, Vxh, Vyh, Psih, 
     uh, vh, wh, ph, zetah, Uuh, Uvh, Uph, Vuh, Vvh, Vph, uUxvUyh, uVxvVyh, 
-    F, F₋₁, sol₋₁)
+    F)
 end
 
 
@@ -403,7 +411,7 @@ Set a plane wave solution with initial speed u₀, non-dimensional wave
 number κ, and angle θ with the horizontal. The dimensional wavenumber vector 
 is (k, l) = (κ cos θ, κ sin θ) and is rounded to the nearest grid wavenumber.
 """
-function set_planewave!(vs, pr, g, u₀, κ, θ=0)
+function set_planewave!(s, vs, pr, g, u₀, κ, θ=0)
   x, y = g.X, g.Y
 
   kw = 2π/g.Lx*round(Int, κ*cos(θ))
@@ -414,8 +422,8 @@ function set_planewave!(vs, pr, g, u₀, κ, θ=0)
   alpha = pr.N^2*(kw^2+lw^2)/(pr.f^2*pr.m^2) # also (sig^2-f^2)/f^2
 
   uw = u₀
-  vw = u₀ * (p.f*kw - σ*kw)/(σ*kw - p.f*lw)
-  pw = u₀ * (σ^2 - p.f^2)/(σ*kw - p.f*lw)
+  vw = u₀ * (pr.f*kw - σ*kw)/(σ*kw - pr.f*lw)
+  pw = u₀ * (σ^2 - pr.f^2)/(σ*kw - pr.f*lw)
 
   Φ = kw*x + lw*y
 
@@ -423,11 +431,11 @@ function set_planewave!(vs, pr, g, u₀, κ, θ=0)
   v = vw * sin.(Φ)
   p = pw * cos.(Φ)
   
-  set_uvp!(vs, pr, g, u, v, p)
+  set_uvp!(s, vs, pr, g, u, v, p)
   nothing
 end
-set_planewave!(prob, uw, nkw, θ=0) = set_planewave!(prob.vars, prob.params, 
-                                                    prob.grid, uw, nkw, θ)
+set_planewave!(prob, uw, nkw, θ=0) = set_planewave!(
+  prob.state, prob.vars, prob.params, prob.grid, uw, nkw, θ)
 
 # Diagnostics
 """ 
@@ -487,7 +495,7 @@ end
 Returns the domain-averaged potential energy in the first mode.
 """
 @inline mode1pe(s, p, g) = @views p.m^2/(4*g.Lx*g.Ly*p.N^2)*parsevalsum2(
-  s.solc[:, :, 4], g)
+  s.sol[:, :, 4], g)
 
 """
     mode1energy(prob)
