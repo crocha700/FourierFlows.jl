@@ -9,7 +9,7 @@ nu0, nnu0 = 1e-6,   1  # Viscosity
 nu1, nnu1 = 1e-6,   1  # Viscosity
 mu0, nmu0 =  0.0,   0
 mu1, nmu1 =  0.0,   0
-  f, N, m =  1.0, 1.0, 4.0
+  f, N, m =  1.0, 1.0, 16.0
    uw, kw = 0.02, 16
 
 # ε = U / σ L 
@@ -20,6 +20,9 @@ mu1, nmu1 =  0.0,   0
  σ = f*sqrt(1 + (N*kw/m)^2)
 tσ = 2π/σ
 dt = tσ/100
+ni = round(Int, tσ/dt)
+ns = 100
+nt = ns*ni
 
 @printf "σ/f: %.3f, ε: %.3f" σ/f maximum(abs.(q))/σ
 
@@ -31,6 +34,14 @@ function makesquare!(axs)
   nothing
 end
 
+function ticksoff!(axs)
+  for ax in axs
+    ax[:tick_params](bottom=false, left=false, labelbottom=false, 
+      labelleft=false)
+  end
+  nothing
+end
+
 function makeplot!(axs, prob, diags=nothing)
   sca(axs[1]); cla()
   pcolormesh(prob.grid.X, prob.grid.Y, prob.vars.Z)
@@ -38,6 +49,7 @@ function makeplot!(axs, prob, diags=nothing)
   sca(axs[2]); cla()
   pcolormesh(prob.grid.X, prob.grid.Y, real.(prob.vars.u))
   makesquare!(axs[1:2])
+  ticksoff!(axs[1:2])
 
   nothing
 end
@@ -46,13 +58,16 @@ prob = VerticallyCosineBoussinesq.Problem(f=f, N=N, m=m,
   nx=nx, Lx=L, nu0=nu0, nnu0=nnu0, nu1=nu1, nnu1=nnu1, mu0=mu0, nmu0=nmu0, 
   mu1=mu1, nmu1=nmu1, dt=dt, stepper="FilteredRK4")
 
+r = L/15
+envelope(x, y) = exp(-(x^2+y^2)/(2*r^2))
+
 VerticallyCosineBoussinesq.set_Z!(prob, q)
-VerticallyCosineBoussinesq.set_planewave!(prob, uw, kw)
+VerticallyCosineBoussinesq.set_planewave!(prob, uw, kw; envelope=envelope)
 
 fig, axs = subplots(ncols=2, figsize=(7,4))
 
-for i = 1:100
-  @time stepforward!(prob, 100)
+for i = 1:ns
+  @time stepforward!(prob, ni)
   makeplot!(axs, prob)
   pause(0.1)
 end

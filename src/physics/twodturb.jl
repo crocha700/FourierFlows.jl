@@ -3,10 +3,10 @@ module TwoDTurb
 
 using FourierFlows
 
-import FourierFlows: Problem, parsevalsum, parsevalsum2
+import FourierFlows: parsevalsum, parsevalsum2
 
-export Problem, updatevars!, set_q!, 
-       energy, enstrophy, dissipation, work, drag
+export updatevars!, set_q!, energy, enstrophy, dissipation, work, drag
+       
 
 """
     Problem(; parameters...)
@@ -48,28 +48,24 @@ end
 
 Construct an initial-value 2D turbulence problem.
 """
-function InitialValueProblem(; kwargs...)
-  Problem(; kwargs...)
-end
+InitialValueProblem(; kwargs...) = Problem(; kwargs...)
 
 """
     ForcedProblem(; parameters...)
 
 Construct a forced 2D turbulence problem.
 """
-function ForcedProblem(; kwargs...)
-  Problem(; kwargs...)
-end
+ForcedProblem(; kwargs...) = Problem(; kwargs...)
 
 """
     Params(ν, nν, μ, nμ)
 
 Returns the params for unforced two-dimensional turbulence.
 """
-struct Params{T} <: AbstractParams
-  ν::T        # Vorticity viscosity
+struct Params <: AbstractParams
+  ν::Float64  # Vorticity viscosity
   nν::Int     # Vorticity hyperviscous order
-  μ::T        # Bottom drag or hypoviscosity
+  μ::Float64  # Bottom drag or hypoviscosity
   nμ::Int     # Order of hypodrag
 end
 
@@ -82,10 +78,10 @@ Returns the params for forced two-dimensional turbulence with
 hyperviscosity ν and μ of order nν and nμ and forcing calculated by
 calcF!.
 """
-struct ForcedParams{T} <: AbstractParams
-  ν::T              # Vorticity viscosity
+struct ForcedParams <: AbstractParams
+  ν::Float64        # Vorticity viscosity
   nν::Int           # Vorticity hyperviscous order
-  μ::T              # Bottom drag or hypoviscosity
+  μ::Float64        # Bottom drag or hypoviscosity
   nμ::Int           # Order of hypodrag
   calcF!::Function  # Function that calculates the forcing F
 end

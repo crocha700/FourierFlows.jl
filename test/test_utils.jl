@@ -74,6 +74,17 @@ function test_createarrays(T=Float64, dims=(13, 45))
   a1 == a2 && b1 == b2
 end
 
+# Test the mth moment
+function test_xmoment(f::Function, xm; n=256, L=2π, m=1, rtol=1e-3)
+  g = TwoDGrid(n, L); fgrid = f.(g.X, g.Y)
+  isapprox(FourierFlows.xmoment(fgrid, g, m), xm, rtol=rtol)
+end
+
+function test_ymoment(f::Function, ym; n=256, L=2π, m=1, rtol=1e-3)
+  g = TwoDGrid(n, L); fgrid = f.(g.X, g.Y)
+  isapprox(FourierFlows.ymoment(fgrid, g, m), ym, rtol=rtol)
+end
+
 
 # Run tests -------------------------------------------------------------------
 # Test on a rectangular grid
@@ -98,6 +109,7 @@ s2 = sin.(k2*x + l2*y)
 # Analytical expression for the Jacobian of s1 and s2
 Js1s2 = (k1*l2-k2*l1)*cos.(k1*x + l1*y).*cos.(k2*x + l2*y)
 
+
 @test test_parsevalsum(f1, g; realvalued=true)   # Real valued f with rfft
 @test test_parsevalsum(f1, g; realvalued=false)  # Real valued f with fft
 @test test_parsevalsum(f2, g; realvalued=false)  # Complex valued f with fft
@@ -113,6 +125,14 @@ Js1s2 = (k1*l2-k2*l1)*cos.(k1*x + l1*y).*cos.(k2*x + l2*y)
 @test test_rms(32)
 @test test_domainaverage(32; xdir=true)
 @test test_domainaverage(32; xdir=false)
+
+# Gaussian for moment testing
+x0, y0, δx, δy = π/10, -π/5, π/5, π/6
+gauss(x, y) = exp( -(x-x0)^2/(2*δx^2) - (y-y0)^2/(2*δy^2) )
+@test test_xmoment(gauss, x0; m=1)
+@test test_ymoment(gauss, y0; m=1)
+#@test test_xmoment(gauss, δx^2; m=2)
+#@test test_ymoment(gauss, δy^2; m=2)
 
 # Radial spectrum tests. Note that ahρ = ∫ ah ρ dθ.
 n = 128; δ = n/10                 # Parameters

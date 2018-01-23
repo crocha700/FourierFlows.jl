@@ -3,8 +3,8 @@ import FourierFlows.VerticallyCosineBoussinesq
 cfl(prob) = maximum([maximum(abs.(prob.vars.U)), maximum(abs.(prob.vars.V))]*
               prob.ts.dt/prob.grid.dx)
 
-function lambdipoletest(n, dt; L=2π, Ue=1, Re=L/20, nu0=0, nnu0=1, 
-  ti=L/Ue*0.01, nm=3, message=false)
+function test_lambdipole(n, dt; L=2π, Ue=1, Re=L/20, nu0=0, nnu0=1, 
+  ti=L/Ue*0.01, nm=3, message=false, atol=1e-2)
 
   nt = round(Int, ti/dt)
 
@@ -37,7 +37,47 @@ function lambdipoletest(n, dt; L=2π, Ue=1, Re=L/20, nu0=0, nnu0=1,
     end
   end
 
-  isapprox(Ue, mean(Ue_m[2:end]), atol=0.02)
+  isapprox(Ue, mean(Ue_m[2:end]), atol=atol)
 end
 
-@test lambdipoletest(256, 1e-3)
+
+e1(u, v, p, m, N) = @. ( u^2 + v^2 + m^2*p^2/N^2 )/2
+e1(prob) = e1(prob.vars.u, prob.vars.v, prob.vars.p, prob.params.m, 
+  prob.params.N)
+wavecentroid(prob) = (
+  FourierFlows.xmoment(e1(prob), prob.grid), 
+  FourierFlows.ymoment(e1(prob), prob.grid)
+)
+
+function test_groupvelocity(kw; n=128, L=2π, f=1.0, N=1.0, m=4.0, uw=1e-2,
+  rtol=1e-3)
+
+   σ = f*sqrt(1 + (N*kw/m)^2)
+  tσ = 2π/σ
+  dt = tσ/100
+  nt = round(Int, 3tσ/(2dt)) # 3/2 a wave period
+  cga = N^2*kw/(σ*m^2) # analytical group velocity
+
+  prob = VerticallyCosineBoussinesq.Problem(f=f, N=N, m=m, nx=n, Lx=L, dt=dt, 
+    stepper="FilteredRK4")
+    
+  δ = L/10
+  envelope(x, y) = exp(-x^2/(2*δ^2))
+  VerticallyCosineBoussinesq.set_planewave!(prob, uw, kw; envelope=envelope)
+
+  t₋₁ = prob.t
+  xw₋₁, yw₋₁ = wavecentroid(prob)
+    
+  @time stepforward!(prob, nt)
+  VerticallyCosineBoussinesq.updatevars!(prob)
+
+  xw, yw = wavecentroid(prob)
+  cgn = (xw-xw₋₁) / (prob.t-t₋₁)
+
+  isapprox(cga, cgn, rtol=rtol)
+end
+
+
+
+@test test_lambdipole(256, 1e-3)
+@test test_groupvelocity(16)

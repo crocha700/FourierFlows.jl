@@ -8,8 +8,7 @@ function lambdipoletest(n, dt; L=2π, Ue=1, Re=L/20, ν=0, nν=1, ti=L/Ue*0.01,
 
   nt = round(Int, ti/dt)
 
-  prob = TwoDTurb.InitialValueProblem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt,
-    stepper="FilteredRK4")
+  prob = TwoDTurb.Problem(nx=n, Lx=L, ν=ν, nν=nν, dt=dt, stepper="FilteredRK4")
   x, y, q = prob.grid.X, prob.grid.Y, prob.vars.q # nicknames
 
   q0 = FourierFlows.lambdipole(Ue, Re, prob.grid)

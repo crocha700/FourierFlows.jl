@@ -364,8 +364,8 @@ end
 
 # Moments and cumulants
 domainaverage(c, g) = g.dx*g.dy*sum(c)/(g.Lx*g.Ly)
-xmoment(c, g::TwoDGrid, n=1) = sum(g.X.^n.*c)/(sum(c)*g.Lx*g.Ly)
-ymoment(c, g::TwoDGrid, n=1) = sum(g.Y.^n.*c)/(sum(c)*g.Lx*g.Ly)
+xmoment(c, g::TwoDGrid, n=1) = sum(g.X.^n.*c)/sum(c)
+ymoment(c, g::TwoDGrid, n=1) = sum(g.Y.^n.*c)/sum(c)
 
 cumulant_1x(c, g) = g.dx*g.dy*sum(g.X.*c) / domainaverage(c, g)
 cumulant_1y(c, g) = g.dx*g.dy*sum(g.Y.*c) / domainaverage(c, g)

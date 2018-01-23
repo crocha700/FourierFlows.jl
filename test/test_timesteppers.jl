@@ -44,7 +44,7 @@ function testtwodturbstepforward(n=64, L=2π, ν=0.0, nν=2;
   qih[highwavenumbers] =  0
   qi = irfft(qih, g.nx)
 
-  prob = Problem(g, v, p, eq, ts)
+  prob = FourierFlows.Problem(g, v, p, eq, ts)
   TwoDTurb.set_q!(prob, qi)
 
   absq₀ = abs.(prob.state.sol)
