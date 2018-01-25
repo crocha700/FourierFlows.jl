@@ -117,7 +117,7 @@ end
 
 ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m,
    calcF::Function; Ub=0, Vb=0) = ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, 
-    mu1, nmu1, f, N, m, calcF, Ub, Vb)
+    mu1, nmu1, f, N, m, Ub, Vb, calcF)
 
 # Equations
 function Equation(p::VerticallyCosineParams, g::TwoDGrid)
@@ -214,12 +214,9 @@ end
 
 
 # Solvers
-function calcN_linearterms!(
-  N::Array{Complex{Float64},3}, sol::Array{Complex{Float64},3},
-  t::Float64, s::State, v::Vars, p::VerticallyCosineParams, g::TwoDGrid)
-
+function calcN_linearterms!(N, sol, t, s, v, p, g)
   # Zeroth-mode:
-  @views @. N[:, :, 1] = 0
+  #@views @. N[:, :, 1] = 0
   # First-mode linear terms:
   # u
   @views @. N[:, :, 2] =  p.f*sol[:, :, 3] - im*g.kr*sol[:, :, 4]
@@ -227,15 +224,11 @@ function calcN_linearterms!(
   @views @. N[:, :, 3] = -p.f*sol[:, :, 2] - im*g.l *sol[:, :, 4]
   # p
   @views @. N[:, :, 4] = -im*p.N^2/p.m^2*(g.kr*sol[:, :, 2] + g.l*sol[:, :, 3])
-
   nothing
 end
 
 
-function calcN!(
-  N::Array{Complex{Float64},3}, sol::Array{Complex{Float64},3},
-  t::Float64, s::State, v::Vars, p::VerticallyCosineParams, g::TwoDGrid)
-
+function calcN!(N, sol, t, s, v, p, g)
   @views v.Zh .= sol[:, :, 1]
   @views v.uh .= sol[:, :, 2]
   @views v.vh .= sol[:, :, 3]
