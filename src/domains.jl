@@ -1,5 +1,5 @@
 export TwoDGrid, dealias!
-
+using FFTW
 
 """
 Doc.
@@ -45,15 +45,13 @@ struct TwoDGrid <: AbstractGrid
   invKKrsq::Array{Float64,2}
 
   # FFT plans
-  fftplan::Base.DFT.FFTW.cFFTWPlan{Complex{Float64}, -1, false, 2}
+  fftplan::FFTW.cFFTWPlan{Complex{Float64}, -1, false, 2}
 
-  ifftplan::Base.DFT.ScaledPlan{Complex{Float64},
-    Base.DFT.FFTW.cFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
+  ifftplan::AbstractFFTs.ScaledPlan{Complex{Float64}, FFTW.cFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
 
-  rfftplan::Base.DFT.FFTW.rFFTWPlan{Float64, -1, false, 2}
+  rfftplan::FFTW.rFFTWPlan{Float64, -1, false, 2}
 
-  irfftplan::Base.DFT.ScaledPlan{Complex{Float64},
-    Base.DFT.FFTW.rFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
+  irfftplan::AbstractFFTs.ScaledPlan{Complex{Float64}, FFTW.rFFTWPlan{Complex{Float64}, 1, false, 2}, Float64}
 
   # Range objects that access the non-aliased part of the wavenumber range
   ialias::UnitRange{Int64}
@@ -101,19 +99,19 @@ function TwoDGrid(nx::Int, Lx::Float64, ny::Int=nx, Ly::Float64=Lx;
   Lr = [ l[j]  for i = 1:nkr, j = 1:nl]
 
   KKsq  = K.^2 + L.^2
-  invKKsq = 1./KKsq
+  invKKsq = 1 ./ KKsq
   invKKsq[1, 1] = 0
 
   KKrsq = Kr.^2 + Lr.^2
-  invKKrsq = 1./KKrsq
+  invKKrsq = 1 ./ KKrsq
   invKKrsq[1, 1] = 0
 
   # FFT plans
   FFTW.set_num_threads(nthreads)
-  fftplan   = plan_fft(Array{Complex{Float64},2}(nx, ny); flags=effort)
-  ifftplan  = plan_ifft(Array{Complex{Float64},2}(nk, nl); flags=effort)
-  rfftplan  = plan_rfft(Array{Float64,2}(nx, ny); flags=effort)
-  irfftplan = plan_irfft(Array{Complex{Float64},2}(nkr, nl), nx; flags=effort)
+  fftplan   = plan_fft(Array{Complex{Float64}, 2}(uninitialized, nx, ny); flags=effort)
+  ifftplan  = plan_ifft(Array{Complex{Float64}, 2}(uninitialized, nk, nl); flags=effort)
+  rfftplan  = plan_rfft(Array{Float64, 2}(uninitialized, nx, ny); flags=effort)
+  irfftplan = plan_irfft(Array{Complex{Float64}, 2}(uninitialized, nkr, nl), nx; flags=effort)
 
   # Index endpoints for aliased i, j wavenumbers
   iaL, iaR = Int(floor(nk/3))+1, 2*Int(ceil(nk/3))-1

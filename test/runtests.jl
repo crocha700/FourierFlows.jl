@@ -2,6 +2,7 @@
 
 # Start Test Script
 using FourierFlows
+using FFTW
 using Base.Test
 
 # Run tests
@@ -21,9 +22,9 @@ end
     include("test_ifft.jl")
 end
 
-@testset "Utils tests" begin
-    include("test_utils.jl")
-end
+# @testset "Utils tests" begin
+#     include("test_utils.jl")
+# end
 
 @testset "Timestepper tests" begin
     include("test_timesteppers.jl")

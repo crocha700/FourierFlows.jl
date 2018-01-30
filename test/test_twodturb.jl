@@ -28,10 +28,10 @@ function lambdipoletest(n, dt; L=2π, Ue=1, Re=L/20, ν=0, nν=1, ti=L/Ue*0.01,
       Ue_m[i] = (xq[i]-xq[i-1]) / ((nt-1)*dt)
     end
 
-    if message
-      @printf("     step: %04d, t: %3.3f, time: %.3f, cfl: %.2f\n",
-        prob.step, prob.t, toq(), cfl(prob))
-    end
+    # if message
+    #   @printf("     step: %04d, t: %3.3f, time: %.3f, cfl: %.2f\n",
+    #     prob.step, prob.t, toq(), cfl(prob))
+    # end
   end
   # println(Ue_m)
   # println(abs(Ue - mean(Ue_m[2:end]))/abs(Ue))

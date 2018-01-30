@@ -1,5 +1,5 @@
 module BarotropicQG
-using FourierFlows
+using FourierFlows, FFTW
 Grid = TwoDGrid
 
 # Params

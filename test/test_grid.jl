@@ -60,10 +60,10 @@ function create_testfuncs(g)
     f1hr = rfft(f1);
     f2hr = rfft(f2);
 
-    f1hr_mul = Array{Complex128}(g.nkr, g.nl)
+    f1hr_mul = Array{Complex{Float64}}(g.nkr, g.nl)
     A_mul_B!( f1hr_mul, g.rfftplan, f1 )
 
-    f2hr_mul = Array{Complex128}(g.nkr, g.nl)
+    f2hr_mul = Array{Complex{Float64}}(g.nkr, g.nl)
     A_mul_B!( f2hr_mul, g.rfftplan, f2 )
 
     ############################################################################
