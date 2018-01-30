@@ -6,7 +6,7 @@ import FourierFlows: autoconstructtimestepper, parsevalsum, parsevalsum2
 
 export updatevars!, set_Z!, set_uvp!, set_planewave!, 
        totalenergy, mode0energy, mode0enstrophy, mode1ke, mode1pe, mode1energy,
-       mode0dissipation, mode1dissipation, mode0drag, mode1drag
+       mode0dissipation, mode1dissipation, mode0drag, mode1drag, mode0apv
 
 """ 
     Problem(; parameters...)
@@ -551,5 +551,51 @@ mode1energy(pb) = mode1energy(pb.state, pb.params, pb.grid)
 mode1dissipation(pb) = mode1dissipation(pb.state, pb.vars, pb.params, pb.grid)
 mode1drag(pb) = mode1drag(pb.state, pb.vars, pb.params, pb.grid)
 totalenergy(pb) = totalenergy(pb.state, pb.vars, pb.params, pb.grid)
+
+"""
+    mode0apv(uh, vh, ph, Zh, m, N, g)
+
+Returns the barotropic available potential vorticity.
+"""
+function mode0apv(uh, vh, ph, Zh, m, N, g)
+  Z = irfft(Zh, g.nx)
+  u = irfft(uh, g.nx)
+  v = irfft(vh, g.nx)
+  p = irfft(ph, g.nx)
+
+  Z .- m^2/N^2*irfft(im*g.kr.*rfft(v.*p) .- im*g.l.*rfft(u.*p), g.nx)
+end
+
+"""
+    mode0apv(prob)
+
+Returns the barotropic available potential vorticity.
+"""
+@inline function mode0apv(s, v, p, g)
+  @views @. v.Zh = s.sol[:, :, 1]
+  @views @. v.uh = s.sol[:, :, 2]
+  @views @. v.vh = s.sol[:, :, 3]
+  @views @. v.ph = s.sol[:, :, 4]
+
+  A_mul_B!(v.Z, g.irfftplan, v.Zh)
+  A_mul_B!(v.u, g.irfftplan, v.uh)
+  A_mul_B!(v.v, g.irfftplan, v.vh)
+  A_mul_B!(v.p, g.irfftplan, v.ph)
+
+  @views @. v.Uu = v.u*v.p
+  @views @. v.Vu = v.v*v.p
+
+  A_mul_B!(v.Uuh, g.rfftplan, v.Uu)
+  A_mul_B!(v.Vuh, g.rfftplan, v.Vu)
+
+  @. v.uUxvUyh = im*g.kr*v.Vuh - im*g.l*v.Uuh
+  
+  A_mul_B!(v.uUxvUy, g.irfftplan, v.uUxvUyh)
+
+  @. v.Z - p.m^2/p.N^2*v.uUxvUy
+end
+
+@inline mode0apv(prob) = mode0apv(prob.state, prob.vars, prob.params, 
+                                  prob.grid)
                                         
 end # module
