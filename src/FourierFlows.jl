@@ -39,6 +39,6 @@ include("physics/barotropicqg.jl")
 include("physics/verticallyfourierboussinesq.jl")
 include("physics/verticallycosineboussinesq.jl")
 include("physics/traceradvdiff.jl")
-#include("physics/tracerpatcheqn.jl")
+include("physics/tracerpatcheqn.jl")
 
 end # module

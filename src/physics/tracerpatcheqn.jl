@@ -15,7 +15,6 @@ function AnalyticFlowProblem(;
   uy = nothing,
   vx = nothing,
   dt = 0.01,
-  timestepper = "RK4"
   )
 
   if η == nothing; η = κ; end
@@ -31,14 +30,8 @@ function AnalyticFlowProblem(;
    p = AnalyticFlowParams(κ, η, u★, v★, ux★, uy★, vx★)
    v = Vars()
   eq = Equation()
-  st = State{Float64,1}(0.0, 0, zeros(Float64, 5))
-
-  if timestepper == "RK4"
-    ts = RK4TimeStepper(dt, eq.LC)
-  elseif timestepper == "ForwardEuler"
-    ts = ForwardEulerTimeStepper(dt, eq.LC)
-  end
-
+  st = State(0.0, 0, dt, zeros(Float64, 5))
+  ts = RK4TimeStepper(dt, eq.LC, Float64)
 
   FourierFlows.Problem(g, v, p, eq, ts, st)
 end
@@ -80,7 +73,7 @@ end
 
 # Equation --------------------------------------------------------------------
 function Equation()
-  FourierFlows.Equation{1}(zeros(5), calcN!)
+  FourierFlows.Equation(zeros(5), calcN!)
 end
 
 
@@ -88,7 +81,7 @@ end
 type Vars <: AbstractVars end
 
 # Solver ----------------------------------------------------------------------
-function calcN!(N::Array{Float64, 1}, sol::Array{Float64, 1}, t::Float64,
+function calcN!(N::Array{Float64,1}, sol::Array{Float64,1}, t::Float64,
   s::State, v::Vars, p::AnalyticFlowParams, g::AbstractGrid)
 
   # Key:
