@@ -1,6 +1,6 @@
 import Base: resize!, getindex
-export AbstractDiagnostic, Diagnostic
-export resize!, update!, increment!
+export AbstractDiagnostic, Diagnostic,
+       resize!, update!, increment!
 
 abstract type AbstractDiagnostic end
 
