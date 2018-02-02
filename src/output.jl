@@ -47,15 +47,17 @@ getindex(out::Output, key) = out.fields[key](out.prob)
 Save current output fields for file in out.filename.
 """
 function saveoutput(out::Output)
+  groupname = "timeseries"
   jldopen(out.filename, "a+") do file
-    groupname = "timeseries"
-    file["$groupname/t/$(out.prob.step)"] = out.prob.t
     for fieldname in keys(out.fields)
       file["$groupname/$fieldname/$(out.prob.step)"] = out[fieldname]
     end
+    file["$groupname/t/$(out.prob.step)"] = out.prob.t
   end
   nothing
 end
+
+saveoutput(out::Void) = nothing
 
 
 """ 
