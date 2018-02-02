@@ -1,32 +1,30 @@
 using PyPlot, FourierFlows
 import FourierFlows.TwoDTurb
-import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
+import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, work, drag
 
  n, L  =  256, 2π
- ν, nν = 1e-3,  1
+ ν, nν = 2e-3,  1
  μ, nμ = 1e-1, -1
-dt, tf = 2e-3, 1000
-
-nt = round(Int, tf/dt)
-ns = 100
+dt, nt = 1e-3, 4000
+ns = 10
 
 # Forcing
 fi = 1.0
 ki = 16
-amplitude = fi*ki/sqrt(dt) * n^2/4
+amplitude = fi*ki/sqrt(dt) * n^2/2
 
 function calcF!(F, sol, t, s, v, p, g)
   if t == s.t # not a substep
     F .= 0.0
-
+  
     θk = 2π*rand() 
     phase = 2π*im*rand()
 
-    i₁ = round(Int, abs(ki*cos(θk))) + 1
     j₁ = round(Int, abs(ki*sin(θk))) + 1  # j₁ >= 1
+    i₁ = round(Int, abs(ki*cos(θk))) + 1
     j₂ = g.nl + 2 - j₁                    # e.g. j₁ = 1 => j₂ = nl+1
 
-    if j₁ != 1  # apply forcing to l = (+/-)l★ mode
+    if j₁ != 1
       F[i₁, j₁] = amplitude*exp(phase)
       F[i₁, j₂] = amplitude*exp(phase)
     else        # apply forcing to l=0 mode
@@ -43,7 +41,7 @@ prob = TwoDTurb.ForcedProblem(nx=n, Lx=L, ν=ν, nν=nν, μ=μ, nμ=nμ, dt=dt,
 E = Diagnostic(energy,      prob, nsteps=nt) 
 D = Diagnostic(dissipation, prob, nsteps=nt)
 R = Diagnostic(drag,        prob, nsteps=nt)
-I = Diagnostic(injection,   prob, nsteps=nt)
+I = Diagnostic(work,        prob, nsteps=nt)
 diags = [E, D, I, R]
 
 filename = @sprintf("stochastictest_ki%d.jld2", ki)
@@ -71,10 +69,10 @@ function makeplot(prob, diags)
   ii = (i₀+1):E.count
 
   # dEdt = I - D - R?
-  total = I[ii] - D[ii] - R[ii]
+  total = I[ii] - D[ii] - R[ii] - 0.5*fi^2
   residual = dEdt - total
 
-  plot(E.time[ii], I[ii], "o", markersize=0.5, label="injection (\$I\$)")
+  plot(E.time[ii], I[ii], "o", markersize=0.5, label="work (\$W\$)")
   plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
   plot(E.time[ii], -R[ii], label="drag (\$R\$)")
   plot(E.time[ii], residual, "c-", label="residual")
@@ -94,9 +92,10 @@ function makeplot(prob, diags)
 end
 
 # Step forward
+ni = round(Int, nt/ns)
 for i = 1:ns
   tic()
-  stepforward!(prob, diags, round(Int, nt/ns))
+  stepforward!(prob, diags, ni)
   tc = toq()
 
   TwoDTurb.updatevars!(prob)  
@@ -108,8 +107,8 @@ for i = 1:ns
   res = makeplot(prob, diags)
   pause(0.1)
 
-  @printf("step: %04d, t: %.1f, cfl: %.3f, time: %.2f s, mean(res) = %.3e\n", 
-    prob.step, prob.t, cfl, tc, mean(res))
+  @printf("step: %04d, t: %.1f, cfl: %.3f, time: %.2f s, mean(res): %.3e, mean(work/fi^2): %.3f \n", 
+    prob.step, prob.t, cfl, tc, mean(res), mean(I[1:prob.step]/fi^2))
     
   savename = @sprintf("./plots/stochastictest_ki%d_%06d.png", ki, prob.step)
   savefig(savename, dpi=240)
@@ -117,5 +116,5 @@ end
 
 savediagnostic(E, "energy", out.filename)
 savediagnostic(D, "dissipation", out.filename)
-savediagnostic(I, "injection", out.filename)
+savediagnostic(I, "work", out.filename)
 savediagnostic(R, "drag", out.filename)
