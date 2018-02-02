@@ -43,7 +43,8 @@ function ForcedProblem(;
         nμ = 0,
         dt = 0.01,
    stepper = "RK4",
-     calcF = nothing
+     calcF = nothing,
+   force2k = force2k
   )
 
   if calcF == nothing; _calcF(F, sol, t, s, v, p, g) = nothing
@@ -51,7 +52,7 @@ function ForcedProblem(;
   end
 
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
+  pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF, force2k)
   vs = TwoDTurb.ForcedVars(g)
   eq = TwoDTurb.Equation(pr, g)
   ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
@@ -83,6 +84,8 @@ struct ForcedParams <: AbstractParams
   μ::Float64        # Bottom drag or hypoviscosity
   nμ::Float64       # Order of hypodrag
   calcF!::Function  # Function that calculates the forcing F
+  force2k::Array{Complex{Float64}, 2}  # the spectrum of the spatial
+                                      # correlation of the forcing
 end
 
 
