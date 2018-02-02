@@ -1,13 +1,11 @@
 using PyPlot, FourierFlows
 import FourierFlows.TwoDTurb
-import FourierFlows.TwoDTurb: energy, dissipation, injection, drag
+import FourierFlows.TwoDTurb: energy, dissipation, work, drag
 
  n, L  =  128, 2π
  ν, nν = 2e-4,  1
  μ, nμ = 1e-1, -1
-dt, tf = 2e-1, 1000
-
-nt = round(Int, tf/dt)
+dt, nt = 1e-2, 1000
 
 # Forcing
 fi = 0.01
@@ -34,11 +32,11 @@ function runtest(prob, nt)
   E = Diagnostic(energy,      prob, nsteps=nt)
   D = Diagnostic(dissipation, prob, nsteps=nt)
   R = Diagnostic(drag,        prob, nsteps=nt)
-  I = Diagnostic(injection,   prob, nsteps=nt)
+  I = Diagnostic(work,        prob, nsteps=nt)
   diags = [E, D, I, R]
 
   tic()
-  stepforward!(prob, diags, round(Int, nt))
+  stepforward!(prob, diags, nt)
   @printf("step: %04d, t: %.1f, time: %.2f s\n", prob.step, prob.t, toq())
 
   diags
