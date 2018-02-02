@@ -146,21 +146,22 @@ function calcN_advection!(
   N::Array{Complex{Float64},2}, sol::Array{Complex{Float64},2},
   t::Float64, s::State, v::AbstractVars, p::AbstractParams, g::TwoDGrid)
 
-  @. v.Uh =  im * g.l  * g.invKKrsq * sol
-  @. v.Vh = -im * g.kr * g.invKKrsq * sol
-
-  v.qh .= sol
-  A_mul_B!(v.U, g.irfftplan, v.Uh)
-  A_mul_B!(v.V, g.irfftplan, v.Vh)
-  A_mul_B!(v.q, g.irfftplan, v.qh)
-
-  @. v.U *= v.q # U*q
-  @. v.V *= v.q # V*q
-
-  A_mul_B!(v.Uh, g.rfftplan, v.U) # \hat{U*q}
-  A_mul_B!(v.Vh, g.rfftplan, v.V) # \hat{U*q}
-
-  @. N = -im*g.kr*v.Uh - im*g.l*v.Vh
+  # @. v.Uh =  im * g.l  * g.invKKrsq * sol
+  # @. v.Vh = -im * g.kr * g.invKKrsq * sol
+  #
+  # v.qh .= sol
+  # A_mul_B!(v.U, g.irfftplan, v.Uh)
+  # A_mul_B!(v.V, g.irfftplan, v.Vh)
+  # A_mul_B!(v.q, g.irfftplan, v.qh)
+  #
+  # @. v.U *= v.q # U*q
+  # @. v.V *= v.q # V*q
+  #
+  # A_mul_B!(v.Uh, g.rfftplan, v.U) # \hat{U*q}
+  # A_mul_B!(v.Vh, g.rfftplan, v.V) # \hat{U*q}
+  #
+  # @. N = -im*g.kr*v.Uh - im*g.l*v.Vh
+  @. N = 0
   nothing
 end
 

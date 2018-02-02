@@ -2,38 +2,46 @@ using PyPlot, FourierFlows
 import FourierFlows.TwoDTurb
 import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
 
- n, L  =  256, 2π
+ n, L  =  64, 2π
  ν, nν = 0e-3, 1
- μ, nμ = 1e-1, 0
-dt, tf = 1e-2, 2/μ
+ μ, nμ = 0e-1, 0
+dt, tf = 4e-2, 100
 
 nt = round(Int, tf/dt)
-ns = 20
+ns = nt
 
 # Forcing
-kf, dkf = 15, 2
-σ = 0.1*1000
+kf, dkf = 12.0, 2.0
+σ = 0.1
 
 g  = TwoDGrid(n, L)
 
 force2k = exp.(-(sqrt.(g.Kr.^2+g.Lr.^2)-kf).^2/(2*dkf^2))
-σ0 = sum(force2k./(2*(g.Kr.^2+g.Lr.^2)+1e-15))
+force2k[sqrt.(g.Kr.^2 + g.Lr.^2) .< 2.0 ]=0
+force2k[sqrt.(g.Kr.^2 + g.Lr.^2) .> 20.0 ]=0
+iksq = 1./(g.Kr.^2 + g.Lr.^2)
+iksq[1, 1] = 0
+σ0 = sum(force2k.*iksq/1.0)
 force2k .= σ/σ0 * force2k
+# if size(force2k)[1]==g.nkr
+#     force2k .= 2*force2k
+# end
+
 
 srand(1234)
 
-
 function calcF!(F, sol, t, s, v, p, g)
   if t == s.t # not a substep
-    eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2)*s.dt)
-    F .= eta.*sqrt.(p.force2k)
+    eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2))*sqrt(s.dt)
+    F .= eta.*sqrt.(p.force2k)*(g.nx*g.ny)
   end
-
   nothing
 end
 
 prob = TwoDTurb.ForcedProblem(nx=n, Lx=L, ν=ν, nν=nν, μ=μ, nμ=nμ, dt=dt,
-  stepper="RK4", calcF=calcF!, force2k=force2k)
+  stepper="FilteredForwardEuler", calcF=calcF!, force2k=force2k)
+
+TwoDTurb.set_q!(prob, 0*g.X)
 
 E = Diagnostic(energy,      prob, nsteps=nt)
 D = Diagnostic(dissipation, prob, nsteps=nt)
@@ -67,10 +75,15 @@ function makeplot(prob, diags)
   total = I[ii] - D[ii] - R[ii]
   residual = dEdt - total
 
-  plot(E.time[ii], I[ii], "o", markersize=0.5, label="injection (\$I\$)")
-  plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
-  plot(E.time[ii], -R[ii], label="drag (\$R\$)")
-  plot(E.time[ii], residual, "c-", label="residual")
+  # plot(E.time[ii], I[ii], "o", markersize=0.5, label="injection (\$I\$)")
+  # plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
+  # plot(E.time[ii], -R[ii], label="drag (\$R\$)")
+  # plot(E.time[ii], residual, "c-", label="residual")
+  # plot(E.time[ii], dEdt[ii], label="dissipation (\$dE/dt\$)")
+  plot(E.time[ii], I[ii], label="injection (\$I\$)")
+  # plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
+  # plot(E.time[ii], -R[ii], label="drag (\$R\$)")
+  # plot(E.time[ii], residual, "c-", label="residual")
 
   ylabel("Energy sources and sinks")
   xlabel(L"t")
@@ -78,6 +91,7 @@ function makeplot(prob, diags)
 
   sca(axs[3]); cla()
   plot(E.time[ii], E[ii])
+  plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
   xlabel(L"t")
   ylabel(L"E")
 
@@ -106,7 +120,7 @@ for i = 1:ns
     prob.step, prob.t, cfl, tc, mean(res))
 
   savename = @sprintf("./plots/stochastictest_kf%d_%06d.png", kf, prob.step)
-  savefig(savename, dpi=240)
+  # savefig(savename, dpi=240)
 end
 
 savediagnostic(E, "energy", out.filename)
