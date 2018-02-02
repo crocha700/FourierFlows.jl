@@ -35,9 +35,7 @@ function Diagnostic(calc::Function, prob::FourierFlows.Problem; freq=1,
   Diagnostic(calc, prob, num, data, time, step, value, 1, freq)
 end
 
-function getindex(d::Diagnostic, inds...)
-  getindex(d.data, inds...)
-end
+getindex(d::Diagnostic, inds...) = getindex(d.data, inds...)
 
 """ 
     resize!(diag, newnum)
@@ -64,13 +62,8 @@ function update!(diag::AbstractDiagnostic)
   nothing
 end
 
-function update!(diags::AbstractArray)
-  for diag in diags
-    update!(diag)
-  end
-  nothing
-end
-
+update!(diags::AbstractArray) = for diag in diags; update!(diag); end
+  
 """ 
     increment!(diag)
 
@@ -92,14 +85,4 @@ function increment!(diag::AbstractDiagnostic)
   nothing
 end
 
-""" 
-    increment!(diags)
-
-Increment the array of Diagnostics diags. 
-"""
-function increment!(diags::AbstractArray)
-  for d in diags
-    increment!(d)
-  end
-  nothing
-end
+increment!(diags::AbstractArray) = for d in diags; increment!(d); end
