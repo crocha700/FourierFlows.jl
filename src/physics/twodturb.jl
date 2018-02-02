@@ -168,8 +168,8 @@ function calcN_advection!(
   nothing
 end
 
-function calcN_forced!(N::Array{Complex{Float64}, 2}, 
-                sol::Array{Complex{Float64}, 2}, t::Float64, 
+function calcN_forced!(N::Array{Complex{Float64},2}, 
+                sol::Array{Complex{Float64},2}, t::Float64, 
                 s::State, v::ForcedVars, p::ForcedParams, g::TwoDGrid)
 
   calcN_advection!(N, sol, t, s, v, p, g)

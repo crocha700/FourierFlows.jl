@@ -46,17 +46,31 @@ getindex(out::Output, key) = out.fields[key](out.prob)
 
 Save current output fields for file in out.filename.
 """
-function saveoutput(out::Output)
-  groupname = "timeseries"
-  jldopen(out.filename, "a+") do file
+function saveoutput(out::Output; groupname="timeseries")
+  file = jldopen(out.filename, "r+")
+  try
+    file["$groupname/t/$(out.prob.step)"] = out.prob.t
+
+    for fieldname in keys(out.fields)
+      file["$groupname/$fieldname/$(out.prob.step)"] = out[fieldname]
+    end
+  catch
+    warn("Output not saved.")
+  finally
+    close(file)
+  end
+
+  #=
+  jldopen(out.filename, "r+") do file
     for fieldname in keys(out.fields)
       file["$groupname/$fieldname/$(out.prob.step)"] = out[fieldname]
     end
     file["$groupname/t/$(out.prob.step)"] = out.prob.t
   end
+  =#
+
   nothing
 end
-
 saveoutput(out::Void) = nothing
 
 
@@ -67,7 +81,7 @@ Save certain aspects of a problem timestepper, grid, and params. Functions
 that are fields in params are not saved.
 """
 function saveproblem(prob::AbstractProblem, filename::String)
-  jldopen(filename, "a+") do file
+  jldopen(filename, "w") do file
     file["timestepper/dt"] = prob.ts.dt   # Timestepper
 
     for field in gridfieldstosave         # Grid
@@ -91,7 +105,7 @@ Save diagnostics to file, labeled by the string diagname.
 function savediagnostic(diag::AbstractDiagnostic, diagname::String,
   filename::String) 
 
-  jldopen(filename, "a+") do file
+  jldopen(filename, "r+") do file
     file["diags/$diagname/time"] = diag.time
     file["diags/$diagname/data"] = diag.data
   end

@@ -83,8 +83,7 @@ function Problem(g, v, p, eq::Equation, ts; soltype=cxeltype(eq.LC))
   Problem(g, v, p, eq, ts, st)
 end
 
-function Problem(g, v, p, eq::DualEquation, ts; 
-                 solctype=cxeltype(eq.LCc), solrtype=cxeltype(eq.LCr))
+function Problem(g, v, p, eq::DualEquation, ts; solctype=cxeltype(eq.LCc), solrtype=cxeltype(eq.LCr))
   st = DualState(solctype, size(eq.LCc), solrtype, size(eq.LCr), ts.dt)
   Problem(g, v, p, eq, ts, st)
 end
