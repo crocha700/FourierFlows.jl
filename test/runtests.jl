@@ -39,9 +39,9 @@ end
   include("test_verticallycosineboussinesq.jl")    
 end
 
-@testset "Physics: Fourier Boussinesq " begin
-  include("test_verticallyfourierboussinesq.jl")    
-end
+#@testset "Physics: Fourier Boussinesq " begin
+#  include("test_verticallyfourierboussinesq.jl")    
+#end
 
 #@time @testset "BarotropicQG and Timestepper tests" begin
 #    include("test_BarotropicQG_timestep.jl")
