@@ -133,7 +133,7 @@ Returns the vars for unforced two-dimensional turbulence with grid g.
 """
 function ForcedVars(g::TwoDGrid)
   @createarrays Float64 (g.nx, g.ny) q U V psi
-  @createarrays Complex{Float64} (g.nkr, g.nl) sol qh Uh Vh psih F
+  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih F
   ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F)
 end
 
