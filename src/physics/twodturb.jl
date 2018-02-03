@@ -43,8 +43,7 @@ function ForcedProblem(;
         nμ = 0,
         dt = 0.01,
    stepper = "RK4",
-     calcF = nothing,
-   force2k = force2k
+     calcF = nothing
   )
 
   if calcF == nothing; _calcF(F, sol, t, s, v, p, g) = nothing
@@ -52,7 +51,7 @@ function ForcedProblem(;
   end
 
   g  = TwoDGrid(nx, Lx, ny, Ly)
-  pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF, force2k)
+  pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
   vs = TwoDTurb.ForcedVars(g)
   eq = TwoDTurb.Equation(pr, g)
   ts = FourierFlows.autoconstructtimestepper(stepper, dt, eq.LC, g)
@@ -84,8 +83,6 @@ struct ForcedParams <: AbstractParams
   μ::Float64        # Bottom drag or hypoviscosity
   nμ::Float64       # Order of hypodrag
   calcF!::Function  # Function that calculates the forcing F
-  force2k::Array{Complex{Float64}, 2}  # the spectrum of the spatial
-                                      # correlation of the forcing
 end
 
 
@@ -146,29 +143,27 @@ function calcN_advection!(
   N::Array{Complex{Float64},2}, sol::Array{Complex{Float64},2},
   t::Float64, s::State, v::AbstractVars, p::AbstractParams, g::TwoDGrid)
 
-  # @. v.Uh =  im * g.l  * g.invKKrsq * sol
-  # @. v.Vh = -im * g.kr * g.invKKrsq * sol
-  #
-  # v.qh .= sol
-  # A_mul_B!(v.U, g.irfftplan, v.Uh)
-  # A_mul_B!(v.V, g.irfftplan, v.Vh)
-  # A_mul_B!(v.q, g.irfftplan, v.qh)
-  #
-  # @. v.U *= v.q # U*q
-  # @. v.V *= v.q # V*q
-  #
-  # A_mul_B!(v.Uh, g.rfftplan, v.U) # \hat{U*q}
-  # A_mul_B!(v.Vh, g.rfftplan, v.V) # \hat{U*q}
-  #
-  # @. N = -im*g.kr*v.Uh - im*g.l*v.Vh
-  @. N = 0
+  @. v.Uh =  im * g.l  * g.invKKrsq * sol
+  @. v.Vh = -im * g.kr * g.invKKrsq * sol
+
+  v.qh .= sol
+  A_mul_B!(v.U, g.irfftplan, v.Uh)
+  A_mul_B!(v.V, g.irfftplan, v.Vh)
+  A_mul_B!(v.q, g.irfftplan, v.qh)
+
+  @. v.U *= v.q # U*q
+  @. v.V *= v.q # V*q
+
+  A_mul_B!(v.Uh, g.rfftplan, v.U) # \hat{U*q}
+  A_mul_B!(v.Vh, g.rfftplan, v.V) # \hat{U*q}
+
+  @. N = -im*g.kr*v.Uh - im*g.l*v.Vh
   nothing
 end
 
 function calcN_forced!(N::Array{Complex{Float64}, 2},
                 sol::Array{Complex{Float64}, 2}, t::Float64,
                 s::State, v::ForcedVars, p::ForcedParams, g::TwoDGrid)
-
   calcN_advection!(N, sol, t, s, v, p, g)
   p.calcF!(v.F, sol, t, s, v, p, g)
 

@@ -2,13 +2,15 @@ using PyPlot, FourierFlows
 import FourierFlows.TwoDTurb
 import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
 
- n, L  =  64, 2π
+ n, L  =  256, 2π
  ν, nν = 0e-3, 1
  μ, nμ = 0e-1, 0
-dt, tf = 4e-2, 100
+dt, tf = 1e-2, 100
 
 nt = round(Int, tf/dt)
-ns = nt
+
+nt = 2
+ns = 1
 
 # Forcing
 kf, dkf = 12.0, 2.0
@@ -32,16 +34,18 @@ srand(1234)
 
 function calcF!(F, sol, t, s, v, p, g)
   if t == s.t # not a substep
-    eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2))*sqrt(s.dt)
-    F .= eta.*sqrt.(p.force2k)*(g.nx*g.ny)
+    # eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2)*sqrt(s.dt))
+    # F .= eta.*sqrt.(force2k)*(g.nx*g.ny)
+    F[2, 3] .= 1
   end
   nothing
 end
 
 prob = TwoDTurb.ForcedProblem(nx=n, Lx=L, ν=ν, nν=nν, μ=μ, nμ=nμ, dt=dt,
-  stepper="FilteredForwardEuler", calcF=calcF!, force2k=force2k)
+  stepper="FilteredForwardEuler", calcF=calcF!)
 
 TwoDTurb.set_q!(prob, 0*g.X)
+
 
 E = Diagnostic(energy,      prob, nsteps=nt)
 D = Diagnostic(dissipation, prob, nsteps=nt)
@@ -91,7 +95,7 @@ function makeplot(prob, diags)
 
   sca(axs[3]); cla()
   plot(E.time[ii], E[ii])
-  plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
+  # plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
   xlabel(L"t")
   ylabel(L"E")
 
@@ -108,7 +112,7 @@ for i = 1:ns
   tc = toq()
 
   TwoDTurb.updatevars!(prob)
-  saveoutput(out)
+  # saveoutput(out)
 
   cfl = prob.ts.dt*maximum(
     [maximum(prob.vars.V)/prob.grid.dx, maximum(prob.vars.U)/prob.grid.dy])
@@ -119,11 +123,14 @@ for i = 1:ns
   @printf("step: %04d, t: %.1f, cfl: %.3f, time: %.2f s, mean(res) = %.3e\n",
     prob.step, prob.t, cfl, tc, mean(res))
 
-  savename = @sprintf("./plots/stochastictest_kf%d_%06d.png", kf, prob.step)
+  # savename = @sprintf("./plots/stochastictest_kf%d_%06d.png", kf, prob.step)
   # savefig(savename, dpi=240)
 end
 
-savediagnostic(E, "energy", out.filename)
-savediagnostic(D, "dissipation", out.filename)
-savediagnostic(I, "injection", out.filename)
-savediagnostic(R, "drag", out.filename)
+println(prob.state.sol[2, 3])
+
+
+# savediagnostic(E, "energy", out.filename)
+# savediagnostic(D, "dissipation", out.filename)
+# savediagnostic(I, "injection", out.filename)
+# savediagnostic(R, "drag", out.filename)
