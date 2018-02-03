@@ -135,8 +135,8 @@ struct ForwardEulerTimeStepper{dim} <: AbstractTimeStepper
   N::Array{Complex{Float64},dim}    # Explicit linear and nonlinear terms
 end
 
-function ForwardEulerTimeStepper(dt::Float64, sol::AbstractArray)
-  N = zeros(sol)
+function ForwardEulerTimeStepper(dt, LC)
+  @createarrays eltype(LC) size(LC) N
   ForwardEulerTimeStepper{ndims(LC)}(dt, N)
 end
 
@@ -173,7 +173,7 @@ struct FilteredForwardEulerTimeStepper{dim} <: AbstractTimeStepper
 end
 
 function FilteredForwardEulerTimeStepper(dt, LC, g; filterkwargs...)
-  N = zeros(LC)
+  @createarrays eltype(LC) size(LC) N
   filter = makefilter(g, typeof(dt), size(LC); filterkwargs...)
   FilteredForwardEulerTimeStepper{ndims(N)}(dt, N, filter)
 end
