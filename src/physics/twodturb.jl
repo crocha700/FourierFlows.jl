@@ -98,7 +98,7 @@ end
 
 function Equation(p::ForcedParams, g::TwoDGrid)
   LC = -p.ν*g.KKrsq.^p.nν - p.μ*g.KKrsq.^p.nμ
-  LC[1, 1] = 0
+  LC[1, 1] .= 0
   FourierFlows.Equation{2}(LC, calcN_forced!)
 end
 
