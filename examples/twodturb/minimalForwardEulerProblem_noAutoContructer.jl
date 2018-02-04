@@ -4,7 +4,7 @@ import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
 
  n, L  =  128, 2π
  ν, nν = 0e-3, 1
- μ, nμ = 0e-2, 0
+ μ, nμ = 1e-1, 0
 dt = 0.1
 
 
@@ -30,8 +30,10 @@ g1  = TwoDGrid(nx, Lx, ny, Ly)
 pr1 = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
 vs1 = TwoDTurb.ForcedVars(g1)
 eq1 = TwoDTurb.Equation(pr1, g1)
-ts1 = FourierFlows.ForwardEulerTimeStepper(dt, deepcopy(eq1.LC))
+# ts1 = FourierFlows.ForwardEulerTimeStepper(dt, deepcopy(eq1.LC))    # this works
+ts1 = FourierFlows.ForwardEulerTimeStepper(dt, eq1.LC)    # this DOES NOT work
 prob1 = FourierFlows.Problem(g1, vs1, pr1, eq1, ts1)
+s1 = prob1.state
 
 g2  = TwoDGrid(nx, Lx, ny, Ly)
 pr2 = TwoDTurb.ForcedParams(ν, nν, μ, nμ, _calcF)
@@ -39,8 +41,7 @@ vs2 = TwoDTurb.ForcedVars(g2)
 eq2 = TwoDTurb.Equation(pr2, g2)
 ts2 = FourierFlows.FilteredForwardEulerTimeStepper(dt, eq2.LC, g2)
 prob2 = FourierFlows.Problem(g2, vs2, pr2, eq2, ts2)
-
-s1, s2 = prob1.state, prob2.state
+s2 = prob2.state
 
 
 TwoDTurb.set_q!(prob1, ones(g1.X))
