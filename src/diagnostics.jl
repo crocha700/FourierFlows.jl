@@ -35,9 +35,10 @@ function Diagnostic(calc::Function, prob::FourierFlows.Problem; freq=1,
 end
 
 getindex(d::Diagnostic, inds...) = getindex(d.data, inds...)
+
 function getindex(d::Diagnostic, ::Colon)
   d.count < d.num ? d.data[1:d.count] : (
-    cat(1, d.data[1:mod1(d.count, d.num)], d.data[mod1(d.count, d.num)+1:end]))   
+    cat(1, d.data[mod1(d.count, d.num)+1:end], d.data[1:mod1(d.count, d.num)]))
 end
 
 function getindex(d::Diagnostic, time::Symbol)
@@ -46,7 +47,7 @@ function getindex(d::Diagnostic, time::Symbol)
   else
     i = mod1(d.count, d.num)
     diagfld = getfield(d, :time)
-    return cat(1, diagfld[1:i], diagfld[i+1:end])
+    return cat(1, diagfld[i+1:end], diagfld[1:i])
   end
 end
 

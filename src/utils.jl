@@ -42,7 +42,6 @@ function autoconstructtimestepper(
   stepper, dt, LCc, LCr, g::AbstractGrid=ZeroDGrid(1), 
   solctype::DataType=cxeltype(LCc), solrtype::DataType=cxeltype(LCr))
   
-                                  
   fullsteppername = Symbol(stepper, :TimeStepper)
   if stepper ∈ filteredsteppers
     tsexpr = Expr(:call, fullsteppername, dt, LCc, LCr, g, solctype, solrtype)
