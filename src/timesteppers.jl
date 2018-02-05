@@ -32,15 +32,6 @@ Step forward the problem prob for nsteps while calculating the
 diagnostics in diags.
 """
 function stepforward!(prob::Problem, diags::AbstractArray, nsteps)
-  # Initialize diagnostics for speed
-  for diag in diags
-    newnum = ceil(Int, (diag.count+nsteps)/diag.freq)
-    if newnum > diag.num
-      warn("Resizing diags before stepping forward...")
-      resize!(diag, newnum)
-    end
-  end
-
   for step = 1:nsteps
     stepforward!(prob)
     for diag in diags

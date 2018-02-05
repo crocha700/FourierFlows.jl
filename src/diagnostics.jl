@@ -1,6 +1,5 @@
-import Base: resize!, getindex
-export AbstractDiagnostic, Diagnostic,
-       resize!, update!, increment!
+import Base: getindex
+export AbstractDiagnostic, Diagnostic, update!, increment!
 
 abstract type AbstractDiagnostic end
 
@@ -36,17 +35,19 @@ function Diagnostic(calc::Function, prob::FourierFlows.Problem; freq=1,
 end
 
 getindex(d::Diagnostic, inds...) = getindex(d.data, inds...)
+function getindex(d::Diagnostic, ::Colon)
+  d.count < d.num ? d.data[1:d.count] : (
+    cat(1, d.data[1:mod1(d.count, d.num)], d.data[mod1(d.count, d.num)+1:end]))   
+end
 
-""" 
-    resize!(diag, newnum)
-
-Resize the Diagnostic data and time arrays to length newnum. 
-"""
-function resize!(diag::AbstractDiagnostic, newnum::Int)
-  resize!(diag.data, newnum)
-  resize!(diag.time, newnum)
-  resize!(diag.step, newnum)
-  nothing
+function getindex(d::Diagnostic, time::Symbol)
+  if d.count < d.num
+    return getfield(d, :time)[1:d.count]
+  else
+    i = mod1(d.count, d.num)
+    diagfld = getfield(d, :time)
+    return cat(1, diagfld[1:i], diagfld[i+1:end])
+  end
 end
 
 """ 
@@ -55,10 +56,10 @@ end
 Update diag with its current value.
 """
 function update!(diag::AbstractDiagnostic)
-  diag.data[diag.count] = diag.calc(diag.prob)
-  diag.time[diag.count] = diag.prob.t
-  diag.step[diag.count] = diag.prob.step
-  diag.value = diag.data[diag.count]
+  i = mod1(diag.count, diag.num)
+  diag.value = diag.data[i] = diag.calc(diag.prob)
+  diag.time[i] = diag.prob.t
+  diag.step[i] = diag.prob.step
   nothing
 end
 
@@ -70,18 +71,11 @@ update!(diags::AbstractArray) = for diag in diags; update!(diag); end
 Increment the Diagnostic diag.
 """
 function increment!(diag::AbstractDiagnostic)
-  if diag.count < diag.num
-    diag.data[diag.count+1] = diag.calc(diag.prob)
-    diag.time[diag.count+1] = diag.prob.t
-    diag.step[diag.count+1] = diag.prob.step
-  else
-    push!(diag.data, diag.calc(diag.prob))
-    push!(diag.time, diag.prob.t)
-    push!(diag.step, diag.prob.step)
-    diag.num += 1
-  end
   diag.count += 1
-  diag.value = diag.data[diag.count]
+  i = mod1(diag.count, diag.num)
+  diag.value = diag.data[i] = diag.calc(diag.prob)
+  diag.time[i] = diag.prob.t
+  diag.step[i] = diag.prob.step
   nothing
 end
 
