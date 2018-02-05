@@ -41,6 +41,7 @@ function Problem(;
   linear = false,
   linearized = false,
   calcF = nothing,
+  c0 = nothing,
   )
 
   g = TwoDGrid(nx, Lx, ny, Ly)
@@ -55,10 +56,11 @@ function Problem(;
     vs = Vars(g)
   end
 
-  if calcF != nothing; eq = ForcedEquation(pr, g)
-  elseif linear;       eq = LinearEquation(pr, g)
-  elseif linearized;   eq = LinearizedEquation(pr, g)
-  else;                eq = Equation(pr, g)
+  if c0 != nothing;        eq = TracerForcedEquation(pr, g)
+  elseif calcF != nothing; eq = ForcedEquation(pr, g)
+  elseif linear;           eq = LinearEquation(pr, g)
+  elseif linearized;       eq = LinearizedEquation(pr, g)
+  else;                    eq = Equation(pr, g)
   end
 
   ts = autoconstructtimestepper(stepper, dt, eq.LC, g)
@@ -119,6 +121,29 @@ ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, f, N, m,
    calcF::Function; Ub=0, Vb=0) = ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, 
     mu1, nmu1, f, N, m, Ub, Vb, calcF)
 
+struct TracerForcedParams <: VerticallyCosineParams
+  nu0::Float64    # Mode-0 viscosity
+  nnu0::Int       # Mode-0 hyperviscous order
+  nu1::Float64    # Mode-1 viscosity
+  nnu1::Int       # Mode-1 hyperviscous order
+  mu0::Float64     # Hypoviscosity/bottom drag 
+  nmu0::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  mu1::Float64     # Hypoviscosity/bottom drag 
+  nmu1::Float64    # Order of hypoviscosity (nmu=0 for bottom drag)
+  kap::Float64
+  nkap::Int
+  f::Float64      # Planetary vorticity
+  N::Float64      # Buoyancy frequency
+  m::Float64      # Mode-one wavenumber
+  Ub::Float64     # Steady background barotropic x-velocity
+  Vb::Float64     # Steady background barotropic y-velocity
+  calcF!::Function
+end
+
+TracerForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, mu1, nmu1, kap, nkap, f, N, m,
+   calcF::Function; Ub=0, Vb=0) = ForcedParams(nu0, nnu0, nu1, nnu1, mu0, nmu0, 
+    mu1, nmu1, kap, nkap, f, N, m, Ub, Vb, calcF)
+
 # Equations
 function Equation(p::VerticallyCosineParams, g::TwoDGrid)
   LC = zeros(Complex{Float64}, g.nkr, g.nl, 4)
@@ -143,6 +168,14 @@ function ForcedEquation(p, g)
   FourierFlows.Equation(eq.LC, calcN_forced!)
 end
 
+function TracerForcedEquation(p, g)
+  eq1 = Equation(p, g)
+  LC = zeros(Complex{Float64}, g.nkr, g.nl, 5)
+  @views @. LC[:, :, 1:4] = eq1.LC
+  @views @. LC[:, :, 5] = -p.kap*g.KKrsq^p.nkap
+  FourierFlows.Equation(LC, calcN_tracer!)
+end
+
 
 # Vars
 abstract type VerticallyCosineVars <: AbstractVars end
@@ -152,6 +185,9 @@ physifields = [:Z, :U, :V, :UZuz, :VZvz, :Ux, :Uy, :Vx, :Vy, :Psi,
 transfields = [ Symbol(var, :h) for var in physifields ]
 forcefields = [:F]
 
+tracerphysifields = cat(1, physifields, [:c, :Uc, :Vc])
+tracertransfields = [ Symbol(var, :h) for var in tracerphysifields ]
+
 fieldspecs = cat(1,
   FourierFlows.getfieldspecs(physifields, Array{Float64,2}),
   FourierFlows.getfieldspecs(transfields, Array{Complex{Float64},2}))
@@ -159,14 +195,17 @@ fieldspecs = cat(1,
 forcefieldspecs = cat(1, fieldspecs,
   FourierFlows.getfieldspecs(forcefields, Array{Complex{Float64},3}))
 
+tracerfieldspecs = cat(1,
+  FourierFlows.getfieldspecs(tracerphysifields, Array{Float64,2}),
+  FourierFlows.getfieldspecs(tracertransfields, Array{Complex{Float64},2}),
+  FourierFlows.getfieldspecs(forcefields, Array{Complex{Float64},3}))
+
+
 # Define Vars type for unforced problem
-eval(
-  FourierFlows.getstructexpr(:Vars, fieldspecs; parent=:VerticallyCosineVars))
-
-# Define Vars type for forced problem
-eval(FourierFlows.getstructexpr(:ForcedVars, forcefieldspecs; 
-  parent=:VerticallyCosineVars))
-
+eval(FourierFlows.getstructexpr(:Vars, fieldspecs; parent=:VerticallyCosineVars))
+eval(FourierFlows.getstructexpr(:ForcedVars, forcefieldspecs; parent=:VerticallyCosineVars))
+eval(FourierFlows.getstructexpr(:TracerForcedVars, tracerfieldspecs; parent=:VerticallyCosineVars))
+  
 """
     Vars(g)
 
@@ -211,6 +250,28 @@ function ForcedVars(g)
     F)
 end
 
+"""
+    TracerForcedVars(g)
+
+Returns the vars for forced two-vertical-cosine-mode Boussinesq dynamics
+on the grid g.
+"""
+function TracerForcedVars(g)
+  @createarrays Float64 (g.nx, g.ny) Z U V UZuz VZvz Ux Uy Vx Vy Psi u v w p
+  @createarrays Float64 (g.nx, g.ny) zeta Uu Uv Up Vu Vv Vp uUxvUy uVxvVy c Uc Vc
+  @createarrays Complex{Float64} (g.nkr, g.nl) Zh Uh Vh UZuzh VZvzh Uxh Uyh
+  @createarrays Complex{Float64} (g.nkr, g.nl) Vxh Vyh Psih uh vh wh ph zetah
+  @createarrays Complex{Float64} (g.nkr, g.nl) Uuh Uvh Uph Vuh Vvh Vph
+  @createarrays Complex{Float64} (g.nkr, g.nl) uUxvUyh uVxvVyh ch Uch Vch
+  @createarrays Complex{Float64} (g.nkr, g.nl, 5) F
+
+  TracerForcedVars(
+    Z, U, V, UZuz, VZvz, Ux, Uy, Vx, Vy, Psi, 
+    u, v, w, p, zeta, Uu, Uv, Up, Vu, Vv, Vp, uUxvUy, uVxvVy, c, Uc, Vc,
+    Zh, Uh, Vh, UZuzh, VZvzh, Uxh, Uyh, Vxh, Vyh, Psih, 
+    uh, vh, wh, ph, zetah, Uuh, Uvh, Uph, Vuh, Vvh, Vph, uUxvUyh, uVxvVyh, ch, Uch, Vch, 
+    F)
+end
 
 
 # Solvers
@@ -333,6 +394,23 @@ function calcN_forced!(N, sol, t, s, v, p, g)
   nothing
 end
 
+function calcN_tracer!(N, sol, t, s, v, p, g)
+  @views calcN!(N[:, :, 1:4], sol[:, :, 1:4], t, s, v, p, g)
+
+  @views v.ch .= sol[:, :, 5]
+
+  A_mul_B!(v.c, g.irfftplan, v.ch)
+  @. v.Uc = v.U*v.c
+  @. v.Vc = v.V*v.c
+
+  A_mul_B!(v.Uch, g.rfftplan, v.Uc)
+  A_mul_B!(v.Vch, g.rfftplan, v.Vc)
+
+  @views @. N[:, :, 5] = -im*g.kr*v.Uch - im*g.l*v.Vch
+  
+  nothing
+end
+
 
 
 # Helper functions
@@ -342,7 +420,7 @@ end
 Update variables to correspond to the solution in s.sol or prob.state.sol.
 """
 
-function updatevars!(v, s, p, g)
+function updatevars!(v, sol, s, p, g)
   @views @. v.Zh = s.sol[:, :, 1]
   @views @. v.uh = s.sol[:, :, 2]
   @views @. v.vh = s.sol[:, :, 3]
@@ -373,6 +451,17 @@ function updatevars!(v, s, p, g)
   A_mul_B!(v.w, g.irfftplan, wh)
   nothing
 end
+
+updatevars!(v, s, p, g) = updatevars!(v, s.sol, s, p, g)
+
+function updatevars!(v::TracerForcedVars, s, p, g)
+  @views updatevars!(v, s.sol[:, :, 1:4], s, p, g)
+  @views @. v.ch = s.sol[:, :, 5]
+  ch = deepcopy(v.ch)
+  A_mul_B!(v.c, g.irfftplan, ch)
+  nothing
+end
+
 updatevars!(prob) = updatevars!(prob.vars, prob.state, prob.params, prob.grid)
 
 """
@@ -386,6 +475,20 @@ function set_Z!(s, v, p, g, Z)
   nothing
 end
 set_Z!(prob, Z) = set_Z!(prob.state, prob.vars, prob.params, prob.grid, Z)
+
+"""
+    set_c!(prob, c)
+
+Set zeroth mode vorticity and update vars. 
+"""
+function set_c!(s, v, p, g, c)
+  @views A_mul_B!(s.sol[:, :, 5], g.rfftplan, c)
+  updatevars!(v, s, p, g)
+  nothing
+end
+set_c!(prob, c) = set_c!(prob.state, prob.vars, prob.params, prob.grid, c)
+
+
 
 """ 
     set_uvp!(prob)

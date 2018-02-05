@@ -25,7 +25,8 @@ function Problem(;
         dt = 0.01,
    stepper = "RK4",
      calcF = nothing,
-         T = typeof(Lx)
+         T = typeof(Lx),
+        c0 = nothing,
   )
 
   g  = TwoDGrid(T, nx, Lx, ny, Ly)
@@ -33,6 +34,9 @@ function Problem(;
   if calcF == nothing
     pr = TwoDTurb.Params(ν, nν, μ, nμ)
     vs = TwoDTurb.Vars(g)
+  elseif c0 != nothing
+    pr = TwoDTurb.WithTracerForcedParams(ν, nν, μ, nμ, calcF)
+    vs = TwoDTurb.WithTracerForcedVars(g)
   else
     pr = TwoDTurb.ForcedParams(ν, nν, μ, nμ, calcF)
     vs = TwoDTurb.ForcedVars(g)
@@ -72,7 +76,7 @@ end
 Params(ν, nν) = Params(ν, nν, 0, 0)
 
 """
-  ForcedParams(ν, nν, μ, nμ, calcF!)
+    ForcedParams(ν, nν, μ, nμ, calcF!)
 
 Returns the params for forced two-dimensional turbulence with
 hyperviscosity ν and μ of order nν and nμ and forcing calculated by
@@ -83,6 +87,23 @@ struct ForcedParams <: AbstractParams
   nν::Int           # Vorticity hyperviscous order
   μ::Float64        # Bottom drag or hypoviscosity
   nμ::Int           # Order of hypodrag
+  calcF!::Function  # Function that calculates the forcing F
+end
+
+"""
+    WithTracerForcedParams(ν, nν, μ, nμ, calcF!)
+
+Returns the params for forced two-dimensional turbulence with
+hyperviscosity ν and μ of order nν and nμ and forcing calculated by
+calcF!.
+"""
+struct WithTracerForcedParams <: AbstractParams
+  ν::Float64        # Vorticity viscosity
+  nν::Int           # Vorticity hyperviscous order
+  μ::Float64        # Bottom drag or hypoviscosity
+  nμ::Int           # Order of hypodrag
+  κ::Float64
+  nκ::Int
   calcF!::Function  # Function that calculates the forcing F
 end
 
@@ -104,10 +125,22 @@ function Equation(p::ForcedParams, g)
   FourierFlows.Equation{Complex{Float64},2}(LC, calcN_forced!)
 end
 
+function Equation(p::WithTracerForcedParams, g)
+  LC = zeros(g.nkr, g.nl, 2)
+  LC[:, :, 1] = -p.ν*g.KKrsq.^p.nν - p.μ*g.KKrsq.^p.nμ
+  LC[:, :, 2] = -p.κ*g.KKrsq.^p.nκ
+  LC[1, 1, 1] = 0
+  FourierFlows.Equation{Complex{Float64},3}(LC, calcN_forced!)
+end
+
+
 # Properties of Vars types:
 physifields = [:q, :U, :V, :psi]
 transfields = [ Symbol(fld, :h) for fld in physifields ]
 forcefields = [:F]
+
+tracerphysifields = [:q, :U, :V, :psi, :c]
+tracertransfields = [ Symbol(fld, :h) for fld in tracerphysifields ]
 
 fieldspecs = cat(1,
   FourierFlows.getfieldspecs(physifields, Array{Float64,2}),
@@ -116,12 +149,16 @@ fieldspecs = cat(1,
 forcefieldspecs = cat(1, fieldspecs, 
   FourierFlows.getfieldspecs(forcefields, Array{Complex{Float64},2}))
 
-# Define Vars type for unforced two-dimensional turbulence
-eval(FourierFlows.getstructexpr(:Vars, fieldspecs; parent=:AbstractVars))
+tracerfieldspecs = cat(1,
+  FourierFlows.getfieldspecs(tracerphysifields, Array{Float64,2}),
+  FourierFlows.getfieldspecs(tracertransfields, Array{Complex{Float64},2}),
+  FourierFlows.getfieldspecs(forcefields, Array{Complex{Float64},2}))
 
-# Define Vars type for forced two-dimensional turbulence
-eval(FourierFlows.getstructexpr(:ForcedVars, forcefieldspecs; 
-  parent=:AbstractVars))
+# Define Vars types
+eval(FourierFlows.getstructexpr(:Vars, fieldspecs; parent=:AbstractVars))
+eval(FourierFlows.getstructexpr(:ForcedVars, forcefieldspecs; parent=:AbstractVars))
+eval(FourierFlows.getstructexpr(:WithTracerForcedVars, tracerfieldspecs; parent=:AbstractVars))
+  
   
 """
     Vars(g)
@@ -144,6 +181,18 @@ function ForcedVars(g)
   @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih F
   ForcedVars(q, U, V, psi, qh, Uh, Vh, psih, F)
 end
+
+"""
+    WithTracerForcedVars(g)
+
+Returns the vars for unforced two-dimensional turbulence with grid g.
+"""
+function WithTracerForcedVars(g)
+  @createarrays Float64 (g.nx, g.ny) q U V psi c
+  @createarrays Complex{Float64} (g.nkr, g.nl) qh Uh Vh psih ch F
+  ForcedVars(q, U, V, psi, c, qh, Uh, Vh, psih, ch, F)
+end
+
 
 # Solvers
 function calcN_advection!(
@@ -179,6 +228,33 @@ function calcN_forced!(N::Array{Complex{Float64},2},
   nothing
 end
 
+function calcN_tracer!(N::Array{Complex{Float64},3}, 
+                sol::Array{Complex{Float64},3}, t::Float64, 
+                s::State, v::WithTracerForcedVars, p::WithTracerForcedParams, g::TwoDGrid)
+
+  @views calcN_forced!(N[:, :, 1], sol[:, :, 1], t, s, v, p, g)
+
+  @. v.Uh =  im * g.l  * g.invKKrsq * sol[:, :, 1]
+  @. v.Vh = -im * g.kr * g.invKKrsq * sol[:, :, 1]
+
+  v.ch .= sol[:, :, 2]
+  A_mul_B!(v.U, g.irfftplan, v.Uh)
+  A_mul_B!(v.V, g.irfftplan, v.Vh)
+  A_mul_B!(v.c, g.irfftplan, v.ch)
+
+  @. v.U *= v.c # U*q
+  @. v.V *= v.c # V*q
+
+  A_mul_B!(v.Uh, g.rfftplan, v.U) # \hat{U*q}
+  A_mul_B!(v.Vh, g.rfftplan, v.V) # \hat{U*q}
+
+  @views @. N[:, :, 2] = -im*g.kr*v.Uh - im*g.l*v.Vh
+
+  nothing
+end
+
+
+
 # Helper functions
 """
     updatevars!(v, s, g)
@@ -201,6 +277,36 @@ function updatevars!(v, s, g)
   nothing
 end
 
+# Helper functions
+"""
+    updatevars!(v, s, g)
+
+Update the vars in v on the grid g with the solution in s.sol.
+"""
+function updatevars!(v::WithTracerForcedVars, s, g)
+  v.qh .= s.sol[:, :, 1]
+  v.ch .= s.sol[:, :, 2]
+  @. v.psih = -g.invKKrsq * v.qh
+  @. v.Uh = -im * g.l  * v.psih
+  @. v.Vh =  im * g.kr * v.psih
+
+  ch1 = deepcopy(v.ch)
+  qh1 = deepcopy(v.qh)
+  Uh1 = deepcopy(v.Uh)
+  Vh1 = deepcopy(v.Vh)
+
+  A_mul_B!(v.q, g.irfftplan, qh1)
+  A_mul_B!(v.c, g.irfftplan, ch1)
+  A_mul_B!(v.U, g.irfftplan, Uh1)
+  A_mul_B!(v.V, g.irfftplan, Vh1)
+  nothing
+end
+
+"""
+    updatevars!(v, s, g)
+
+Update the vars in v on the grid g with the solution in s.sol.
+"""
 function updatevars!(prob::AbstractProblem)
   updatevars!(prob.vars, prob.state, prob.grid)
 end
@@ -214,6 +320,18 @@ on the grid g.
 function set_q!(s, v, g, q)
   A_mul_B!(s.sol, g.rfftplan, q)
   s.sol[1, 1] = 0 # zero out domain average
+  updatevars!(v, s, g)
+end
+
+"""
+    set_q!(s, v, g, q)
+
+Set the solution s.sol as the transform of q and update variables v 
+on the grid g.
+"""
+function set_q!(s, v::WithTracerForcedVars, g, q)
+  @views A_mul_B!(s.sol[:, :, 1], g.rfftplan, q)
+  s.sol[1, 1, 1] = 0 # zero out domain average
   updatevars!(v, s, g)
 end
 
@@ -233,11 +351,13 @@ end
 Returns the domain-averaged kinetic energy in the Fourier-transformed vorticity
 solution s.sol.
 """
-@inline function energy(s, v, g)
-  @. v.Uh = g.invKKrsq * abs2(s.sol) # qh*Psih
+@inline function energy(qh, v, g)
+  @. v.Uh = g.invKKrsq * abs2(qh) # qh*Psih
   1/(2*g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
 @inline energy(prob) = energy(prob.state, prob.vars, prob.grid)
+@inline energy(s::State, v, g) = energy(s.sol, v, g)
+@inline energy(s::State, v::WithTracerForcedParams, g) = energy(s.sol[:, :, 1], v, g)
 
 """
     enstrophy(prob)
@@ -245,23 +365,24 @@ end
 Returns the domain-averaged enstrophy in the Fourier-transformed vorticity
 solution s.sol.
 """
-@inline function enstrophy(s, g)
-  1/(2*g.Lx*g.Ly)*parsevalsum2(s.sol, g)
+@inline function enstrophy(qh, g)
+  1/(2*g.Lx*g.Ly)*parsevalsum2(qh, g)
 end
 @inline enstrophy(prob) = enstrophy(prob.state, prob.grid)
+@inline enstrophy(s::State, g) = enstrophy(s.sol, g)
 
 """
     dissipation(prob)
 
 Returns the domain-averaged dissipation rate. nν must be >= 1.
 """
-@inline function dissipation(s, v, p, g)
-  @. v.Uh = g.KKrsq^(p.nν-1) * abs2(s.sol)
+@inline function dissipation(qh, v, p, g)
+  @. v.Uh = g.KKrsq^(p.nν-1) * abs2(qh)
   @. v.Uh[1, 1] = 0
   p.ν/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
-@inline dissipation(prob) = dissipation(prob.state, prob.vars, prob.params, 
-                                        prob.grid)
+@inline dissipation(prob) = dissipation(prob.state, prob.vars, prob.params, prob.grid)
+@inline dissipation(s::State, v, p, g) = dissipation(s.sol, v, p, g)
 
 """
     work(prob)
@@ -282,12 +403,13 @@ end
 
 Returns the extraction of domain-averaged energy extraction by the drag μ.
 """
-@inline function drag(s, v, p, g)
-  @. v.Uh = g.KKrsq^(p.nμ-1) * abs2(s.sol)
+@inline function drag(qh, v, p, g)
+  @. v.Uh = g.KKrsq^(p.nμ-1) * abs2(qh)
   @. v.Uh[1, 1] = 0
   p.μ/(g.Lx*g.Ly)*parsevalsum(v.Uh, g)
 end
 @inline drag(prob) = drag(prob.state, prob.vars, prob.params, prob.grid) 
+@inline drag(s::State, v, p, g) = drag(s.sol, v, p, g)
 
 
 end # module
