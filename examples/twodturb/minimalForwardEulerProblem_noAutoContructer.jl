@@ -1,4 +1,4 @@
-using PyPlot, FourierFlows
+using FourierFlows#, PyPlot
 import FourierFlows.TwoDTurb
 import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
 
