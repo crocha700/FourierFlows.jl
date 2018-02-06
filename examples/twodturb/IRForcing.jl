@@ -3,17 +3,17 @@ import FourierFlows.TwoDTurb
 import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
 
  n, L  =  64, 2π
- ν, nν = 1e-6, 2
- μ, nμ = 1e-1, 0
+ ν, nν = 0e-6, 2
+ μ, nμ = 0e-1, 0
 dt, tf = 0.01, 100
 
 nt = round(Int, tf/dt)
 
-nt = 2000
+nt = 5000
 ns = 10
 
 # Forcing
-kf, dkf = 12.0, 2.0
+kf, dkf = 12.0, 1.0
 σ = 0.0001
 
 gr  = TwoDGrid(n, L)
@@ -23,7 +23,7 @@ force2k[gr.KKrsq .< 2.0^2 ] = 0
 force2k[gr.KKrsq .> 20.0^2 ] = 0
 force2k[gr.Kr.<2π/L] = 0
 # σ0 = sum(force2k.*gr.invKKrsq/2.0)
-σ0 = FourierFlows.parsevalsum(force2k.*gr.invKKrsq/2.0, gr)/(g.Lx*g.Ly)
+σ0 = FourierFlows.parsevalsum(force2k.*gr.invKKrsq/2.0, gr)/(gr.Lx*gr.Ly)
 force2k .= σ/σ0 * force2k
 # if size(force2k)[1]==g.nkr
 #     force2k .= 2*force2k
@@ -36,7 +36,9 @@ function calcF!(F, sol, t, s, v, p, g)
   if t == s.t # not a substep
     # eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2)*sqrt(s.dt))
     eta = exp.(2π*im*rand(size(sol)))/sqrt(s.dt)
-    @. F = eta * sqrt(force2k)
+    @. F = eta .* sqrt(force2k)
+    # Fphys = irfft(F, g.nx)
+    # F = rfft(Fphys)
   end
   nothing
 end
@@ -87,8 +89,9 @@ function makeplot(prob, diags)
   # plot(E.time[ii], residual, "c-", label="residual")
   # plot(E.time[ii], dEdt[ii], label="dissipation (\$dE/dt\$)")
   plot(E.time[ii], I[ii] + σ/2, label="injection (\$I\$)")
-  plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
-  plot(E.time[ii], -R[ii], label="drag (\$R\$)")
+  plot(E.time[ii], σ*exp.(0*E.time[ii]), "--")
+  # plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
+  # plot(E.time[ii], -R[ii], label="drag (\$R\$)")
   ylabel("Energy sources and sinks")
   xlabel(L"t")
   legend(fontsize=10)
@@ -102,6 +105,7 @@ function makeplot(prob, diags)
 
   sca(axs[4]); cla()
   plot(E.time[ii], E[ii])
+  plot(E.time[ii], σ/(2μ)*(1-exp.(-2*μ*E.time[ii])), "--")
   # plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
   xlabel(L"t")
   ylabel(L"E")
