@@ -52,20 +52,20 @@ p  = BarotropicQG.Params(g, f0, β, FU, η, μ, ν, νn)
 v  = BarotropicQG.Vars(g)
 eq = BarotropicQG.Equation(p, g)
 
-dt, nsteps  = 1e-2, 200
+dt, nsteps  = 1e-3, 200
 @test test_baroQG_RossbyWave("ETDRK4", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-2, 200
+dt, nsteps  = 1e-3, 200
 @test test_baroQG_RossbyWave("RK4", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  =1e-2, 200
+dt, nsteps  =1e-3, 200
 @test test_baroQG_RossbyWave("FilteredRK4", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-7, 200
+dt, nsteps  = 1e-3, 200
 @test test_baroQG_RossbyWave("AB3", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-9, 1000
+dt, nsteps  = 1e-3, 200
 @test test_baroQG_RossbyWave("ForwardEuler", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-9, 1000
+dt, nsteps  = 1e-3, 200
 @test test_baroQG_RossbyWave("FilteredForwardEuler", dt, nsteps, g, p, v, eq)
