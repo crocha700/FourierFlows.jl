@@ -5,16 +5,16 @@ import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
  n, L  =  128, 2π
  ν, nν = 1e-6, 2
  μ, nμ = 1e-1, 0
-dt, tf = 0.004, 100
+dt, tf = 0.01, 100
 
 nt = round(Int, tf/dt)
 
-nt = 10000
-ns = 10
+nt = 20000
+ns = 50
 
 # Forcing
 kf, dkf = 12.0, 1.0
-σ = 0.01
+σ = 0.005
 
 gr  = TwoDGrid(n, L)
 
@@ -44,7 +44,7 @@ function calcF!(F, sol, t, s, v, p, g)
   if t == s.t # not a substep
     # eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2)*sqrt(s.dt))
 
-    eta = exp.(2π*im*rand(size(sol)))/sqrt(2*s.dt)
+    eta = exp.(2π*im*rand(size(sol)))/sqrt(s.dt)
     eta[1, :] .= 0
     @. F = eta .* sqrt(force2k)
     # Fphys = rfft(irfft(F, g.nx))
@@ -65,6 +65,9 @@ prob = TwoDTurb.ForcedProblem(nx=n, Lx=L, ν=ν, nν=nν, μ=μ, nμ=nμ, dt=dt,
 
 s, v, p, g, eq, ts = prob.state, prob.vars, prob.params, prob.grid, prob.eqn, prob.ts;
 
+p.calcF!(v.F, s.sol, s.t, s, v, p, g)
+
+
 TwoDTurb.set_q!(prob, 0*g.X)
 
 
@@ -79,7 +82,6 @@ getsol(prob) = deepcopy(prob.state.sol)
 out = Output(prob, filename, (:sol, getsol))
 
 function makeplot(prob, diags)
-  E, D, I, R = diags
 
   TwoDTurb.updatevars!(prob)
 
@@ -94,18 +96,18 @@ function makeplot(prob, diags)
 
   i₀ = 1
   dEdt = (E[(i₀+1):E.count] - E[i₀:E.count-1])/prob.ts.dt
-  ii = (i₀+1):E.count
+  ii = (i₀):E.count-1
 
   # dEdt = I - D - R?
-  total = I[ii] - D[ii] - R[ii]
-  residual = dEdt+σ/2 - total
+  total = I[ii] + σ - D[ii] - R[ii]
+  residual = dEdt - total
 
   # plot(E.time[ii], I[ii], "o", markersize=0.5, label="injection (\$I\$)")
   # plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
   # plot(E.time[ii], -R[ii], label="drag (\$R\$)")
   # plot(E.time[ii], residual, "c-", label="residual")
   # plot(E.time[ii], dEdt[ii], label="dissipation (\$dE/dt\$)")
-  plot(E.time[ii], I[ii], label="injection (\$I\$)")
+  plot(E.time[ii], I[ii] + σ, label="injection (\$I\$)")
   plot(E.time[ii], σ*exp.(0*E.time[ii]), "--")
   plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
   plot(E.time[ii], -R[ii], label="drag (\$R\$)")
@@ -114,9 +116,9 @@ function makeplot(prob, diags)
   legend(fontsize=10)
 
   sca(axs[3]); cla()
-  plot(E.time[ii], residual, "c-", label="residual")
-  # plot(E.time[ii], total, label="computed")
-  # plot(E.time[ii], dEdt + σ/2, "--k", label="numerical")
+  # plot(E.time[ii], residual, "c-", label="residual")
+  plot(E.time[ii], total, label="computed")
+  plot(E.time[ii], dEdt, "--k", label="numerical")
 
   ylabel("Energy sources and sinks")
   xlabel(L"t")
@@ -124,7 +126,7 @@ function makeplot(prob, diags)
 
   sca(axs[4]); cla()
   plot(E.time[ii], E[ii])
-  plot(E.time[ii], σ/(4*μ)*(1-exp.(-2*μ*E.time[ii])), "--")
+  plot(E.time[ii], σ/(2*μ)*(1-exp.(-2*μ*E.time[ii])), "--")
   # plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
   xlabel(L"t")
   ylabel(L"E")
@@ -133,7 +135,6 @@ function makeplot(prob, diags)
 
   residual
 end
-
 
 fig, axs = subplots(ncols=2, nrows=2, figsize=(10, 8))
 
@@ -147,10 +148,10 @@ for i = 1:ns
   # saveoutput(out)
 
   cfl = prob.ts.dt*maximum(
-    [maximum(prob.vars.V)/prob.grid.dx, maximum(prob.vars.U)/prob.grid.dy])
+    [maximum(v.V)/g.dx, maximum(v.U)/g.dy])
 
   res = makeplot(prob, diags)
-  pause(0.1)
+  pause(0.01)
 
   # @printf("step: %04d, t: %.1f, cfl: %.3f, time: %.2f s, mean(res) = %.3e\n",
   #   prob.step, prob.t, cfl, tc, mean(res))
