@@ -61,11 +61,11 @@ dt, nsteps  = 1e-3, 200
 dt, nsteps  =1e-3, 200
 @test test_baroQG_RossbyWave("FilteredRK4", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-3, 200
-@test test_baroQG_RossbyWave("AB3", dt, nsteps, g, p, v, eq)
+# dt, nsteps  = 1e-4, 2000
+# @test test_baroQG_RossbyWave("AB3", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-3, 200
+dt, nsteps  = 1e-4, 2000
 @test test_baroQG_RossbyWave("ForwardEuler", dt, nsteps, g, p, v, eq)
 
-dt, nsteps  = 1e-3, 200
+dt, nsteps  = 1e-4, 2000
 @test test_baroQG_RossbyWave("FilteredForwardEuler", dt, nsteps, g, p, v, eq)
