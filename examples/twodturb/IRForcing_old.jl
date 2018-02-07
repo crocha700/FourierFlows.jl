@@ -5,12 +5,15 @@ import FourierFlows.TwoDTurb: energy, enstrophy, dissipation, injection, drag
  n, L  = 128, 2π
  ν, nν = 1e-6, 2
  μ, nμ = 1e-1, 0
-dt, tf = 0.01, 2/μ
+dt, tf = 0.01, 100
+
 nt = round(Int, tf/dt)
-ns = 4
+
+nt = 2000
+ns = 2
 
 # Forcing
-kf, dkf = 12.0, 2.0
+kf, dkf = 14.0, 2.0
 σ = 0.005
 
 gr  = TwoDGrid(n, L)
@@ -23,12 +26,35 @@ force2k[gr.Kr.<2π/L] = 0
 σ0 = FourierFlows.parsevalsum(force2k.*gr.invKKrsq/2.0, gr)/(gr.Lx*gr.Ly)
 force2k .= σ/σ0 * force2k
 
+force2k_fft = exp.(-(sqrt.(gr.KKsq)-kf).^2/(2*dkf^2))
+force2k_fft[gr.KKsq .< 2.0^2 ] = 0
+force2k_fft[gr.KKsq .> 20.0^2 ] = 0
+force2k_fft[abs.(gr.K).<2π/L] = 0
+σ0_fft = sum(force2k_fft.*gr.invKKsq/2.0)
+force2k_fft .= σ/σ0_fft * force2k_fft * (gr.nx*gr.ny)^2
+
+# if size(force2k)[1]==g.nkr
+#     force2k .= 2*force2k
+# end
+
+
 srand(1234)
 
 function calcF!(F, sol, t, s, v, p, g)
+    # eta = (randn(size(sol)) + im*randn(size(sol)))/(sqrt(2)*sqrt(s.dt))
     eta = exp.(2π*im*rand(size(sol)))/sqrt(s.dt)
     eta[1, 1] = 0
     @. F = eta .* sqrt(force2k)
+    # Fphys = rfft(irfft(F, g.nx))
+    # F .= Fphys
+
+    # eta = exp.(2π*im*rand(size(v.q)))/sqrt(s.dt)
+    # eta = (randn(size(v.q)) + im*randn(size(v.q)))/(sqrt(s.dt))
+    # F1 = eta.*sqrt(force2k_fft)
+    # F1[1, 1] = 0
+    # Fphys = real.(ifft(F1))
+    # F2 = rfft(Fphys)
+    # F .= F2
     nothing
 end
 
@@ -37,6 +63,8 @@ prob = TwoDTurb.ForcedProblem(nx=n, Lx=L, ν=ν, nν=nν, μ=μ, nμ=nμ, dt=dt,
 
 s, v, p, g, eq, ts = prob.state, prob.vars, prob.params, prob.grid, prob.eqn, prob.ts;
 
+# p.calcF!(v.Fh, s.sol, s.t, s, v, p, g)
+
 TwoDTurb.set_q!(prob, 0*g.X)
 E = Diagnostic(energy,      prob, nsteps=nt)
 D = Diagnostic(dissipation, prob, nsteps=nt)
@@ -44,6 +72,9 @@ R = Diagnostic(drag,        prob, nsteps=nt)
 I = Diagnostic(injection,   prob, nsteps=nt)
 diags = [E, D, I, R]
 
+filename = @sprintf("stochastictest_kf%d.jld2", kf)
+getsol(prob) = deepcopy(prob.state.sol)
+out = Output(prob, filename, (:sol, getsol))
 
 function makeplot(prob, diags)
 
@@ -53,9 +84,8 @@ function makeplot(prob, diags)
 
   sca(axs[1]); cla()
   pcolormesh(prob.grid.X, prob.grid.Y, prob.vars.q)
-  xlabel(L"$x$")
-  ylabel(L"$y$")
-  axis("square")
+  xlabel(L"x")
+  ylabel(L"y")
 
   sca(axs[2]); cla()
 
@@ -65,43 +95,44 @@ function makeplot(prob, diags)
   ii2 = (i₀+1):E.count
 
   # dEdt = I - D - R?
-
-  # If the Ito interpretation was used for the work
-  # then we need to add the drift term
-  total = I[ii2]+σ - D[ii] - R[ii]      # Ito
-  # total = I[ii2] - D[ii] - R[ii]        # Stratonovich
-
-
+  total = I[ii2] + σ - D[ii] - R[ii]
   residual = dEdt - total
 
-  # If the Ito interpretation was used for the work
-  # then we need to add the drift term
-  plot(E.time[ii], I[ii2] + σ, label="injection (\$I\$)")   # Ito
-  # plot(E.time[ii], I[ii2] , label="injection (\$I\$)")      # Stratonovich
-  plot(E.time[ii], σ+0*E.time[ii], "--")
+  # plot(E.time[ii], I[ii], "o", markersize=0.5, label="injection (\$I\$)")
+  # plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
+  # plot(E.time[ii], -R[ii], label="drag (\$R\$)")
+  # plot(E.time[ii], residual, "c-", label="residual")
+  # plot(E.time[ii], dEdt[ii], label="dissipation (\$dE/dt\$)")
+  plot(E.time[ii], I[ii]+σ, label="injection (\$I\$)")
+  plot(E.time[ii], σ*exp.(0*E.time[ii]), "--")
   plot(E.time[ii], -D[ii], label="dissipation (\$D\$)")
   plot(E.time[ii], -R[ii], label="drag (\$R\$)")
   ylabel("Energy sources and sinks")
-  xlabel(L"$t$")
+  xlabel(L"t")
   legend(fontsize=10)
 
   sca(axs[3]); cla()
-  plot(E.time[ii], total[ii], label=L"computed $dE/dt$")
-  plot(E.time[ii], dEdt, "--k", label=L"numerical $dE/dt$")
-  ylabel(L"$dE/dt$")
-  xlabel(L"$t$")
+  plot(E.time[ii], residual, "c-", label="residual")
+  # plot(E.time[ii], total[ii], label="computed")
+  # plot(E.time[ii], dEdt, "--k", label="numerical")
+
+  ylabel("Energy sources and sinks")
+  xlabel(L"t")
   legend(fontsize=10)
 
   sca(axs[4]); cla()
-  plot(E.time[ii], residual, "c-", label=L"residual = computed $-$ numerical")
-  xlabel(L"$t$")
-  ylabel(L"$dE/dt$")
-  legend(fontsize=10)
+  plot(E.time[ii], E[ii])
+  plot(E.time[ii], σ/(2*μ)*(1-exp.(-2*μ*E.time[ii])), "--")
+  # plot(E.time[ii], 0.1*E.time[ii], label="predicted (\$E\$)")
+  xlabel(L"t")
+  ylabel(L"E")
+
+  println(mean(I[ii]))
 
   residual
 end
 
-fig, axs = subplots(ncols=2, nrows=2, figsize=(12, 8))
+fig, axs = subplots(ncols=2, nrows=2, figsize=(10, 8))
 
 # Step forward
 for i = 1:ns

@@ -59,7 +59,6 @@ function stepforward!(prob::Problem, diags::AbstractArray, nsteps)
         increment!(diag)
       end
     end
-
   end
   nothing
 end
