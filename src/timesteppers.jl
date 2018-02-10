@@ -108,6 +108,35 @@ function getetdcoeffs(dt, LC; ncirc=32, rcirc=eltype(LC)(1))
   ζ, α, β, Γ
 end
 
+function getetdcoeffsBigFloat(dt, LC)
+  L = dt*LC
+  M = ndims(LC)+1
+
+  expL  = big.(exp.(L))
+  expL2 = big.(exp.(L/2))
+  L = big.(L)
+
+  ζc = @. Complex{Float64}( ( expL2-1 ) / L )
+  αc = @. Complex{Float64}( (-4 - L + expL*(4-3L + L^2))/L^3 )
+  βc = @. Complex{Float64}( ( 2 + L + expL*(-2 + L))/L^3 )
+  Γc = @. Complex{Float64}( (-4 - 3L -L^2 + expL*(4 - L))/L^3 )
+
+
+  if eltype(LC) <: Real
+    ζ = dt*real.(ζc)
+    α = dt*real.(αc)
+    β = dt*real.(βc)
+    Γ = dt*real.(Γc)
+  else
+    ζ = dt*ζc
+    α = dt*αc
+    β = dt*βc
+    Γ = dt*Γc
+  end
+
+  ζ, α, β, Γ
+end
+
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
